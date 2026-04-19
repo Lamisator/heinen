@@ -1,6 +1,6 @@
 # HEINEN – Das Zahnquiz
 
-Kompetitives, rundenbasiertes Multiplayer-Quizspiel mit KI-generierten Fragen und Eliminationsmechanik. Kein Installation für Mitspieler nötig – Beitreten per Link.
+Kompetitives, rundenbasiertes Multiplayer-Quizspiel mit KI-generierten Fragen und Eliminationsmechanik. Keine Installation für Mitspieler nötig – Beitreten per Link.
 
 ## Schnellstart
 
