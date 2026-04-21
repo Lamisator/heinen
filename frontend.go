@@ -77,7 +77,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div style="max-width:600px;margin:20px auto">
 <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
 <button class="btn btn-p" style="width:auto;padding:12px 24px" id="home-login-btn" onclick="showScreen('login')">Anmelden</button>
-<button class="btn btn-s" style="width:auto;padding:12px 24px" id="home-panel-btn" style="display:none" onclick="showScreen('dashboard')">User Panel</button>
+<button class="btn btn-s" style="width:auto;padding:12px 24px;display:none" id="home-panel-btn" onclick="showScreen('dashboard')">User Panel</button>
 </div>
 <div class="pst">Offene Lobbys</div>
 <div id="lobby-list"><div style="color:var(--text2);text-align:center;padding:20px">Keine offenen Lobbys vorhanden.</div></div>
