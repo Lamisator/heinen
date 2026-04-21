@@ -39,7 +39,7 @@ var (
 
 func initLog() {
 	var err error
-	logFile, err = os.OpenFile(LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err = os.OpenFile(LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		log.Fatal("Cannot open log file:", err)
 	}
@@ -72,15 +72,19 @@ func logDebug(ip, user, action, details string) { logEvent(LevelDebug, ip, user,
 // writeLog is kept for backwards-compat — defaults to INFO level
 func writeLog(ip, user, action, details string) { logInfo(ip, user, action, details) }
 
-// getIP extracts the client IP from a request, honoring proxies
+// getIP extracts the client IP from a request, honoring proxies only if from trusted source
 func getIP(r *http.Request) string {
-	if f := r.Header.Get("X-Forwarded-For"); f != "" {
-		return strings.Split(f, ",")[0]
+	remoteIP := strings.Split(r.RemoteAddr, ":")[0]
+	isTrustedProxy := remoteIP == "127.0.0.1" || remoteIP == "::1" || remoteIP == "localhost"
+	if isTrustedProxy {
+		if f := r.Header.Get("X-Forwarded-For"); f != "" {
+			return strings.Split(f, ",")[0]
+		}
+		if f := r.Header.Get("X-Real-IP"); f != "" {
+			return f
+		}
 	}
-	if f := r.Header.Get("X-Real-IP"); f != "" {
-		return f
-	}
-	return strings.Split(r.RemoteAddr, ":")[0]
+	return remoteIP
 }
 
 // Regex matches both new format with [LEVEL] and old format without

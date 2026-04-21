@@ -115,10 +115,17 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				wsError(conn, "Spiel nicht gefunden")
 				continue
 			}
-			if g.Settings.LobbyMode == LobbyPassword && p.Password != g.Settings.LobbyPassword {
-				logWarn(wsIP, p.Name, "LOBBY_AUTH_FAIL", "invite="+code)
-				wsError(conn, "Falsches Passwort")
-				continue
+			if g.Settings.LobbyMode == LobbyPassword {
+				if !limiter.CheckLobbyPasswordRate(wsIP) {
+					logWarn(wsIP, p.Name, "LOBBY_RATE_LIMIT", "invite="+code)
+					wsError(conn, "Zu viele Versuche")
+					continue
+				}
+				if p.Password != g.Settings.LobbyPassword {
+					logWarn(wsIP, p.Name, "LOBBY_AUTH_FAIL", "invite="+code)
+					wsError(conn, "Falsches Passwort")
+					continue
+				}
 			}
 			playerID = uuid.New().String()[:12]
 			curInvite = code

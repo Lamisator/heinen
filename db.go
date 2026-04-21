@@ -23,8 +23,8 @@ func initDB() {
 	db.Exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`)
 
 	initSessionTable()
-	os.MkdirAll("sounds", 0755)
-	os.MkdirAll("fonts", 0755)
+	os.MkdirAll("sounds", 0750)
+	os.MkdirAll("fonts", 0750)
 
 	defaults := map[string]string{
 		"ai_provider": "openai", "ai_model": "gpt-5.4-mini", "intro_delay": "4",

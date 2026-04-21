@@ -19,15 +19,28 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(405)
 		return
 	}
+	ip := getIP(r)
+	if !limiter.CheckLoginRate(ip) {
+		logWarn(ip, "", "LOGIN_RATELIMIT", "IP blocked after too many attempts")
+		w.WriteHeader(429)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Zu viele Versuche. Bitte später versuchen."})
+		return
+	}
 	var req struct{ Username, Password string }
 	json.NewDecoder(r.Body).Decode(&req)
-	ip := getIP(r)
+	if limiter.CheckAccountLockout(req.Username) {
+		logWarn(ip, req.Username, "LOGIN_LOCKED", "account locked after failures")
+		w.WriteHeader(429)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Konto gesperrt. Bitte später versuchen."})
+		return
+	}
 	if !authenticateUser(req.Username, req.Password) {
 		logWarn(ip, req.Username, "LOGIN_FAIL", "")
 		w.WriteHeader(401)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Ungültige Zugangsdaten"})
 		return
 	}
+	limiter.RecordSuccess(ip, req.Username)
 	logInfo(ip, req.Username, "LOGIN_OK", "")
 	t := createSession(req.Username)
 	http.SetCookie(w, &http.Cookie{
@@ -210,8 +223,14 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case "GET":
-		oK := getSetting("openai_api_key")
-		aK := getSetting("anthropic_api_key")
+		oK := os.Getenv("OPENAI_API_KEY")
+		if oK == "" {
+			oK = getSetting("openai_api_key")
+		}
+		aK := os.Getenv("ANTHROPIC_API_KEY")
+		if aK == "" {
+			aK = getSetting("anthropic_api_key")
+		}
 		oM := ""
 		if oK != "" {
 			if len(oK) > 8 {
@@ -301,9 +320,15 @@ func handleTestAI(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&req)
 	if req.Key == "" {
 		if req.Provider == "anthropic" {
-			req.Key = getSetting("anthropic_api_key")
+			req.Key = os.Getenv("ANTHROPIC_API_KEY")
+			if req.Key == "" {
+				req.Key = getSetting("anthropic_api_key")
+			}
 		} else {
-			req.Key = getSetting("openai_api_key")
+			req.Key = os.Getenv("OPENAI_API_KEY")
+			if req.Key == "" {
+				req.Key = getSetting("openai_api_key")
+			}
 		}
 	}
 	if req.Model == "" {
@@ -333,7 +358,12 @@ func handleSounds(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewEncoder(w).Encode(res)
 	case "POST":
-		r.ParseMultipartForm(20 << 20)
+		r.Body = http.MaxBytesReader(w, r.Body, 20*1024*1024)
+		if err := r.ParseMultipartForm(20 << 20); err != nil {
+			w.WriteHeader(413)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Datei zu groß"})
+			return
+		}
 		st := r.FormValue("type")
 		valid := false
 		for _, t := range soundTypes {
@@ -364,10 +394,29 @@ func handleSounds(w http.ResponseWriter, r *http.Request) {
 		if oe != "" && oe != ext {
 			os.Remove(filepath.Join("sounds", st+oe))
 		}
-		data, _ := io.ReadAll(file)
-		os.WriteFile(filepath.Join("sounds", st+ext), data, 0644)
+		dst := filepath.Join("sounds", st+ext)
+		out, err := os.Create(dst)
+		if err != nil {
+			w.WriteHeader(500)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Speicherfehler"})
+			return
+		}
+		defer out.Close()
+		written, err := io.CopyN(out, file, 20*1024*1024+1)
+		if err != nil && err != io.EOF {
+			os.Remove(dst)
+			w.WriteHeader(413)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Datei zu groß"})
+			return
+		}
+		if written > 20*1024*1024 {
+			os.Remove(dst)
+			w.WriteHeader(413)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Datei zu groß"})
+			return
+		}
 		setSetting(st+"_ext", ext)
-		logInfo(getIP(r), u, "SOUND_UPLOAD", fmt.Sprintf("type=%s size=%d", st, len(data)))
+		logInfo(getIP(r), u, "SOUND_UPLOAD", fmt.Sprintf("type=%s size=%d", st, written))
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	case "DELETE":
 		var req struct{ Type string }
@@ -501,7 +550,7 @@ func handleLobbies(w http.ResponseWriter, r *http.Request) {
 	lobbies := make([]map[string]interface{}, 0)
 	for _, g := range games {
 		g.mu.Lock()
-		if g.Phase == PhaseLobby && (g.Settings.LobbyMode == LobbyOpen || g.Settings.LobbyMode == LobbyPassword) {
+		if g.Phase == PhaseLobby && g.Settings.LobbyMode == LobbyOpen {
 			connected := 0
 			for _, p := range g.Players {
 				if p.Connected {

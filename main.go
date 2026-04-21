@@ -14,6 +14,17 @@ const (
 	LogFile       = "heinen.log"
 )
 
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss: ws:")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	initLog()
 	initDB()
@@ -45,33 +56,45 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			cleanExpiredSessions()
+			cleanExpiredPlayerTokens()
 		}
 	}()
 
+
+	log.Printf("🦷 Heinen auf http://localhost:%d", Port)
+	mux := http.NewServeMux()
+
 	// API routes
-	http.HandleFunc("/api/login", handleLogin)
-	http.HandleFunc("/api/logout", handleLogout)
-	http.HandleFunc("/api/me", handleMe)
-	http.HandleFunc("/api/change-password", handleChangePassword)
-	http.HandleFunc("/api/users", handleUsers)
-	http.HandleFunc("/api/ai-config", handleAIConfig)
-	http.HandleFunc("/api/test-ai", handleTestAI)
-	http.HandleFunc("/api/sounds", handleSounds)
-	http.HandleFunc("/api/global-sounds", handleGlobalSounds)
-	http.HandleFunc("/api/tutorial", handleTutorial)
-	http.HandleFunc("/api/logs", handleLogs)
-	http.HandleFunc("/api/logs/export", handleLogsExport)
-	http.HandleFunc("/api/lobbies", handleLobbies)
+	mux.HandleFunc("/api/login", handleLogin)
+	mux.HandleFunc("/api/logout", handleLogout)
+	mux.HandleFunc("/api/me", handleMe)
+	mux.HandleFunc("/api/change-password", handleChangePassword)
+	mux.HandleFunc("/api/users", handleUsers)
+	mux.HandleFunc("/api/ai-config", handleAIConfig)
+	mux.HandleFunc("/api/test-ai", handleTestAI)
+	mux.HandleFunc("/api/sounds", handleSounds)
+	mux.HandleFunc("/api/global-sounds", handleGlobalSounds)
+	mux.HandleFunc("/api/tutorial", handleTutorial)
+	mux.HandleFunc("/api/logs", handleLogs)
+	mux.HandleFunc("/api/logs/export", handleLogsExport)
+	mux.HandleFunc("/api/lobbies", handleLobbies)
 
 	// Static and dynamic
-	http.HandleFunc("/sounds/", handleSoundFile)
-	http.Handle("/fonts/", http.StripPrefix("/fonts/", http.FileServer(http.Dir("fonts"))))
-	http.HandleFunc("/ws", handleWS)
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sounds/", handleSoundFile)
+	mux.Handle("/fonts/", http.StripPrefix("/fonts/", http.FileServer(http.Dir("fonts"))))
+	mux.HandleFunc("/ws", handleWS)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprint(w, indexHTML)
 	})
 
-	log.Printf("🦷 Heinen auf http://localhost:%d", Port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", Port), nil))
+	server := &http.Server{
+		Addr:              fmt.Sprintf(":%d", Port),
+		Handler:           securityHeadersMiddleware(mux),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
+	log.Fatal(server.ListenAndServe())
 }
