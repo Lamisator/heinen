@@ -131,3 +131,8 @@ func validateReconnectToken(token string) (string, string, bool) {
 func cleanExpiredPlayerTokens() {
 	db.Exec("DELETE FROM player_tokens WHERE expires_at < ?", time.Now().Unix())
 }
+
+// deleteUserSessions invalidates all sessions for a user (on password change/reset)
+func deleteUserSessions(username string) {
+	db.Exec("DELETE FROM sessions WHERE username = ?", username)
+}

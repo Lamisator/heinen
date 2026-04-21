@@ -36,6 +36,9 @@ func main() {
 
 	logInfo("system", "system", "STARTUP", fmt.Sprintf("Port=%d", Port))
 
+	// Migrate legacy passwords from plaintext/salt:hash to bcrypt (one-time)
+	migrateLegacyPasswords()
+
 	// Periodic session cleanup
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)

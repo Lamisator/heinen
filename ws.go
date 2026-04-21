@@ -11,7 +11,20 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true // Non-browser clients don't send Origin
+	}
+	host := r.Host
+	if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
+		host = fh
+	}
+	if fproto := r.Header.Get("X-Forwarded-Proto"); fproto != "" {
+		return origin == fproto+"://"+host
+	}
+	return origin == "http://"+host || origin == "https://"+host
+}}
 
 func wsError(conn *websocket.Conn, msg string) {
 	d, _ := json.Marshal(map[string]interface{}{"type": "error", "payload": map[string]string{"message": msg}})

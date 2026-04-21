@@ -30,7 +30,15 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	logInfo(ip, req.Username, "LOGIN_OK", "")
 	t := createSession(req.Username)
-	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: t, Path: "/", HttpOnly: true, MaxAge: 86400 * 7})
+	http.SetCookie(w, &http.Cookie{
+		Name:     SessionCookie,
+		Value:    t,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400 * 7,
+	})
 	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "username": req.Username, "isAdmin": isAdmin(req.Username)})
 }
 
@@ -39,7 +47,15 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(SessionCookie); err == nil {
 		deleteSession(c.Value)
 	}
-	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: "", Path: "/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{
+		Name:     SessionCookie,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
@@ -78,6 +94,7 @@ func handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	db.Exec("UPDATE users SET password = ? WHERE username = ?", hashPassword(req.NewPassword), u)
+	deleteUserSessions(u)
 	logInfo(getIP(r), u, "PASSWORD_CHANGE", "")
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
@@ -157,8 +174,11 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 		if req.Password != "" {
+			var targetUser string
+			db.QueryRow("SELECT username FROM users WHERE id = ?", req.ID).Scan(&targetUser)
 			db.Exec("UPDATE users SET password = ? WHERE id = ?", hashPassword(req.Password), req.ID)
-			logInfo(ip, u, "USER_PW_RESET", fmt.Sprintf("id=%d", req.ID))
+			deleteUserSessions(targetUser)
+			logInfo(ip, u, "USER_PW_RESET", fmt.Sprintf("id=%d user=%s", req.ID, targetUser))
 		}
 		if req.IsAdmin != nil {
 			if !*req.IsAdmin {
