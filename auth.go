@@ -1,23 +1,25 @@
 package main
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
-// hashPassword: SHA-256 with 16-byte salt, format "salt_hex:hash_hex"
+// hashPassword uses bcrypt to hash passwords
 func hashPassword(pw string) string {
-	salt := make([]byte, 16)
-	rand.Read(salt)
-	h := sha256.Sum256(append(salt, []byte(pw)...))
-	return hex.EncodeToString(salt) + ":" + hex.EncodeToString(h[:])
+	hash, _ := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+	return string(hash)
 }
 
-// verifyPassword checks a stored hash against a plaintext password
-// Falls back to plaintext comparison for legacy passwords
+// verifyPassword checks a stored hash against plaintext password
+// Supports both bcrypt and legacy SHA-256 (salt:hash) format
 func verifyPassword(stored, pw string) bool {
+	if strings.HasPrefix(stored, "$2") {
+		return bcrypt.CompareHashAndPassword([]byte(stored), []byte(pw)) == nil
+	}
 	parts := strings.SplitN(stored, ":", 2)
 	if len(parts) != 2 {
 		return stored == pw
@@ -28,7 +30,7 @@ func verifyPassword(stored, pw string) bool {
 	return string(h[:]) == string(expected)
 }
 
-// authenticateUser checks credentials and migrates legacy plaintext passwords
+// authenticateUser checks credentials and migrates SHA-256 to bcrypt on next login
 func authenticateUser(username, password string) bool {
 	var stored string
 	if db.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&stored) != nil {
@@ -37,7 +39,7 @@ func authenticateUser(username, password string) bool {
 	if !verifyPassword(stored, password) {
 		return false
 	}
-	if !strings.Contains(stored, ":") {
+	if !strings.HasPrefix(stored, "$2") {
 		db.Exec("UPDATE users SET password = ? WHERE username = ?", hashPassword(password), username)
 	}
 	return true
