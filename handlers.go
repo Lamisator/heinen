@@ -41,6 +41,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !authenticateUser(req.Username, req.Password) {
+		limiter.RecordAuthFailure(req.Username)
 		logWarn(ip, req.Username, "LOGIN_FAIL", "")
 		w.WriteHeader(401)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Ungültige Zugangsdaten"})

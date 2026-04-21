@@ -16,14 +16,19 @@ var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
 	if origin == "" {
 		return true // Non-browser clients don't send Origin
 	}
+	remoteIP := strings.Split(r.RemoteAddr, ":")[0]
+	isTrustedProxy := remoteIP == "127.0.0.1" || remoteIP == "::1"
 	host := r.Host
-	if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
-		host = fh
+	if isTrustedProxy {
+		if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
+			host = fh
+		}
 	}
-	if fproto := r.Header.Get("X-Forwarded-Proto"); fproto != "" {
-		return origin == fproto+"://"+host
+	expected := "http://" + host
+	if isTrustedProxy && r.Header.Get("X-Forwarded-Proto") == "https" {
+		expected = "https://" + host
 	}
-	return origin == "http://"+host || origin == "https://"+host
+	return origin == expected || (host == r.Host && (origin == "http://"+r.Host || origin == "https://"+r.Host))
 }}
 
 func wsError(conn *websocket.Conn, msg string) {

@@ -51,7 +51,7 @@ func (rl *RateLimiter) CheckLoginRate(ip string) bool {
 	return true
 }
 
-// CheckAccountLockout returns true if account is locked after failed attempts
+// CheckAccountLockout returns true if account is currently locked (call before auth attempt)
 func (rl *RateLimiter) CheckAccountLockout(account string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -68,17 +68,28 @@ func (rl *RateLimiter) CheckAccountLockout(account string) bool {
 		}
 		return true
 	}
+	return false
+}
+
+// RecordAuthFailure increments failure counter for account (call after failed auth)
+func (rl *RateLimiter) RecordAuthFailure(account string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := time.Now()
+	acct, ok := rl.accountLimits[account]
+	if !ok {
+		rl.accountLimits[account] = &accountLimit{failures: 1, lastAt: now}
+		return
+	}
 	if now.Sub(acct.lastAt) > 15*time.Minute {
-		rl.accountLimits[account] = &accountLimit{failures: 0, lastAt: now}
-		return false
+		rl.accountLimits[account] = &accountLimit{failures: 1, lastAt: now}
+		return
 	}
 	acct.failures++
 	acct.lastAt = now
 	if acct.failures >= 5 {
 		acct.lockedAt = now
-		return true
 	}
-	return false
 }
 
 // RecordSuccess clears rate limit on successful login
