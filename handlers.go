@@ -19,6 +19,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(405)
 		return
 	}
+	if !verifyCSRFToken(r) {
+		logWarn(getIP(r), "", "CSRF_FAIL", "login")
+		w.WriteHeader(403)
+		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
+		return
+	}
 	ip := getIP(r)
 	if !limiter.CheckLoginRate(ip) {
 		logWarn(ip, "", "LOGIN_RATELIMIT", "IP blocked after too many attempts")
@@ -89,6 +95,12 @@ func handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(405)
 		return
 	}
+	if !verifyCSRFToken(r) {
+		logWarn(getIP(r), "", "CSRF_FAIL", "change-password")
+		w.WriteHeader(403)
+		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
+		return
+	}
 	u := getSessionUser(r)
 	if u == "" {
 		w.WriteHeader(401)
@@ -119,6 +131,12 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 	if u == "" || !isAdmin(u) {
 		w.WriteHeader(403)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Zugriff verweigert"})
+		return
+	}
+	if r.Method != "GET" && !verifyCSRFToken(r) {
+		logWarn(ip, u, "CSRF_FAIL", "users-"+r.Method)
+		w.WriteHeader(403)
+		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 		return
 	}
 	ac := countAdmins()
@@ -219,6 +237,12 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 	u := getSessionUser(r)
 	if u == "" || !isAdmin(u) {
 		w.WriteHeader(403)
+		return
+	}
+	if r.Method != "GET" && !verifyCSRFToken(r) {
+		logWarn(getIP(r), u, "CSRF_FAIL", "ai-config")
+		w.WriteHeader(403)
+		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 		return
 	}
 	switch r.Method {
@@ -348,6 +372,12 @@ func handleSounds(w http.ResponseWriter, r *http.Request) {
 	u := getSessionUser(r)
 	if u == "" || !isAdmin(u) {
 		w.WriteHeader(403)
+		return
+	}
+	if r.Method != "GET" && !verifyCSRFToken(r) {
+		logWarn(getIP(r), u, "CSRF_FAIL", "sounds-"+r.Method)
+		w.WriteHeader(403)
+		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 		return
 	}
 	switch r.Method {
@@ -501,6 +531,12 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	u := getSessionUser(r)
 	if u == "" || !isAdmin(u) {
 		w.WriteHeader(403)
+		return
+	}
+	if r.Method != "GET" && !verifyCSRFToken(r) {
+		logWarn(getIP(r), u, "CSRF_FAIL", "logs-"+r.Method)
+		w.WriteHeader(403)
+		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 		return
 	}
 	switch r.Method {

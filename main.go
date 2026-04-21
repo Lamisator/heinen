@@ -84,6 +84,7 @@ func main() {
 	mux.Handle("/fonts/", http.StripPrefix("/fonts/", http.FileServer(http.Dir("fonts"))))
 	mux.HandleFunc("/ws", handleWS)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		setCSRFToken(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprint(w, indexHTML)
 	})
