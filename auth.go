@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -55,4 +56,13 @@ func countAdmins() int {
 	var c int
 	db.QueryRow("SELECT COUNT(*) FROM users WHERE is_admin = 1").Scan(&c)
 	return c
+}
+
+// bootstrapAdmin creates the first admin account (one-time setup)
+func bootstrapAdmin(username, password string) error {
+	if username == "" || password == "" {
+		return fmt.Errorf("username and password required")
+	}
+	_, err := db.Exec("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)", username, hashPassword(password))
+	return err
 }

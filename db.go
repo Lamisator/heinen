@@ -23,13 +23,6 @@ func initDB() {
 	db.Exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`)
 
 	initSessionTable()
-
-	var count int
-	db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
-	if count == 0 {
-		db.Exec("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)", "admin", "admin")
-		logInfo("system", "system", "INIT", "Standard-Admin erstellt")
-	}
 	os.MkdirAll("sounds", 0755)
 	os.MkdirAll("fonts", 0755)
 

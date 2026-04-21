@@ -17,8 +17,17 @@ func initSessionTable() {
 		expires_at INTEGER NOT NULL
 	)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`)
-	// Clean expired sessions on startup
+	db.Exec(`CREATE TABLE IF NOT EXISTS player_tokens (
+		reconnect_token TEXT PRIMARY KEY,
+		player_id TEXT NOT NULL,
+		game_id TEXT NOT NULL,
+		created_at INTEGER NOT NULL,
+		expires_at INTEGER NOT NULL
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_player_tokens_expires ON player_tokens(expires_at)`)
+	// Clean expired sessions and player tokens on startup
 	cleanExpiredSessions()
+	cleanExpiredPlayerTokens()
 }
 
 func generateToken() string {
@@ -91,4 +100,34 @@ func intToStr(i int) string {
 		buf = append([]byte{'-'}, buf...)
 	}
 	return string(buf)
+}
+
+// issueReconnectToken creates a high-entropy reconnect token for a player
+func issueReconnectToken(playerID, gameID string) string {
+	token := generateToken()
+	now := time.Now().Unix()
+	exp := time.Now().Add(24 * time.Hour).Unix()
+	db.Exec("INSERT INTO player_tokens (reconnect_token, player_id, game_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)", token, playerID, gameID, now, exp)
+	return token
+}
+
+// validateReconnectToken checks if token is valid and returns player_id, game_id. Token is consumed (deleted) on use.
+func validateReconnectToken(token string) (string, string, bool) {
+	var playerID, gameID string
+	var expires int64
+	err := db.QueryRow("SELECT player_id, game_id, expires_at FROM player_tokens WHERE reconnect_token = ?", token).Scan(&playerID, &gameID, &expires)
+	if err != nil {
+		return "", "", false
+	}
+	if time.Now().Unix() > expires {
+		db.Exec("DELETE FROM player_tokens WHERE reconnect_token = ?", token)
+		return "", "", false
+	}
+	db.Exec("DELETE FROM player_tokens WHERE reconnect_token = ?", token)
+	return playerID, gameID, true
+}
+
+// cleanExpiredPlayerTokens removes all expired player tokens
+func cleanExpiredPlayerTokens() {
+	db.Exec("DELETE FROM player_tokens WHERE expires_at < ?", time.Now().Unix())
 }

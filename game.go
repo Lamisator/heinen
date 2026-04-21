@@ -157,19 +157,18 @@ func (g *Game) addPlayer(id, name string) bool {
 	return true
 }
 
-func (g *Game) reconnectPlayer(name string, conn *websocket.Conn) (string, bool) {
+func (g *Game) reconnectPlayerByID(playerID string, conn *websocket.Conn) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for _, p := range g.Players {
-		if p.Name == name && !p.Connected {
-			p.Connected = true
-			g.connMu.Lock()
-			g.connections[p.ID] = conn
-			g.connMu.Unlock()
-			return p.ID, true
-		}
+	p, ok := g.Players[playerID]
+	if !ok || p.Connected {
+		return false
 	}
-	return "", false
+	p.Connected = true
+	g.connMu.Lock()
+	g.connections[playerID] = conn
+	g.connMu.Unlock()
+	return true
 }
 
 func (g *Game) removePlayer(id string) {

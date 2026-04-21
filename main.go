@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -16,6 +17,23 @@ const (
 func main() {
 	initLog()
 	initDB()
+
+	// Require secure admin bootstrap: fail if no admin exists and no bootstrap credentials provided
+	if countAdmins() == 0 {
+		adminPass := os.Getenv("HEINEN_ADMIN_PASSWORD")
+		if adminPass == "" {
+			log.Fatal("ERROR: No admin account exists. Bootstrap via HEINEN_ADMIN_PASSWORD=<password> HEINEN_ADMIN_USER=<username> (default: admin)")
+		}
+		adminUser := os.Getenv("HEINEN_ADMIN_USER")
+		if adminUser == "" {
+			adminUser = "admin"
+		}
+		if err := bootstrapAdmin(adminUser, adminPass); err != nil {
+			log.Fatal("ERROR: Failed to bootstrap admin:", err)
+		}
+		logInfo("system", "system", "INIT", "Admin account bootstrapped: "+adminUser)
+	}
+
 	logInfo("system", "system", "STARTUP", fmt.Sprintf("Port=%d", Port))
 
 	// Periodic session cleanup

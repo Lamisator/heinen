@@ -19,6 +19,13 @@ func wsError(conn *websocket.Conn, msg string) {
 }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
+	// Verify authentication before upgrading WebSocket
+	authUser := getSessionUser(r)
+	if authUser == "" {
+		http.Error(w, "Unauthorized", 401)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -67,21 +74,22 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			continue
 
 		case "create_game":
-			var p struct{ Name, Username string }
+			var p struct{ Name string }
 			json.Unmarshal(msg.Payload, &p)
 			playerID = uuid.New().String()[:12]
-			g := newGame(playerID, p.Name, p.Username)
+			g := newGame(playerID, p.Name, authUser)
 			curInvite = g.InviteCode
 			gamesMu.Lock()
 			games[curInvite] = g
 			gamesMu.Unlock()
+			reconnectToken := issueReconnectToken(playerID, g.ID)
 			g.connMu.Lock()
 			g.connections[playerID] = conn
 			g.connMu.Unlock()
-			d, _ := json.Marshal(map[string]interface{}{"type": "joined", "payload": map[string]string{"playerId": playerID, "gameId": g.ID, "inviteCode": curInvite}})
+			d, _ := json.Marshal(map[string]interface{}{"type": "joined", "payload": map[string]string{"playerId": playerID, "gameId": g.ID, "inviteCode": curInvite, "reconnectToken": reconnectToken}})
 			conn.WriteMessage(websocket.TextMessage, d)
 			g.broadcastState()
-			logInfo(wsIP, p.Username, "GAME_CREATE", fmt.Sprintf("invite=%s lobby=%s", curInvite, g.Settings.LobbyName))
+			logInfo(wsIP, authUser, "GAME_CREATE", fmt.Sprintf("invite=%s lobby=%s", curInvite, g.Settings.LobbyName))
 
 		case "join_game":
 			var p struct{ Name, InviteCode, Password string }
@@ -105,29 +113,45 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				wsError(conn, "Beitritt nicht möglich")
 				continue
 			}
+			reconnectToken := issueReconnectToken(playerID, g.ID)
 			g.connMu.Lock()
 			g.connections[playerID] = conn
 			g.connMu.Unlock()
-			d, _ := json.Marshal(map[string]interface{}{"type": "joined", "payload": map[string]string{"playerId": playerID, "gameId": g.ID, "inviteCode": curInvite}})
+			d, _ := json.Marshal(map[string]interface{}{"type": "joined", "payload": map[string]string{"playerId": playerID, "gameId": g.ID, "inviteCode": curInvite, "reconnectToken": reconnectToken}})
 			conn.WriteMessage(websocket.TextMessage, d)
 			g.broadcastState()
 
 		case "reconnect":
-			var p struct{ Name, InviteCode string }
+			var p struct{ ReconnectToken string }
 			json.Unmarshal(msg.Payload, &p)
-			code := strings.ToLower(p.InviteCode)
-			gamesMu.Lock()
-			g, ok := games[code]
-			gamesMu.Unlock()
+			playerID, gameID, ok := validateReconnectToken(p.ReconnectToken)
 			if !ok {
+				wsError(conn, "Ungültiges Reconnect-Token")
 				continue
 			}
-			if rid, ok := g.reconnectPlayer(p.Name, conn); ok {
-				playerID = rid
-				curInvite = code
+			gamesMu.Lock()
+			g, ok := games[curInvite]
+			if !ok {
+				for code, gg := range games {
+					if gg.ID == gameID {
+						g = gg
+						curInvite = code
+						ok = true
+						break
+					}
+				}
+			}
+			gamesMu.Unlock()
+			if !ok {
+				wsError(conn, "Spiel nicht gefunden")
+				continue
+			}
+			if ok := g.reconnectPlayerByID(playerID, conn); ok {
 				d, _ := json.Marshal(map[string]interface{}{"type": "reconnected", "payload": map[string]string{"playerId": playerID, "gameId": g.ID, "inviteCode": curInvite}})
 				conn.WriteMessage(websocket.TextMessage, d)
 				g.broadcastState()
+			} else {
+				wsError(conn, "Spieler nicht gefunden")
 			}
 
 		case "update_settings":
