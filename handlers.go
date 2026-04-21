@@ -143,7 +143,7 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 	ac := countAdmins()
 	switch r.Method {
 	case "GET":
-		rows, _ := db.Query("SELECT id, username, is_admin FROM users ORDER BY id")
+		rows, _ := db.Query("SELECT id, username, is_admin, password FROM users ORDER BY id")
 		if rows == nil {
 			w.WriteHeader(500)
 			return
@@ -152,9 +152,12 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 		users := make([]map[string]interface{}, 0)
 		for rows.Next() {
 			var id, admin int
-			var un string
-			rows.Scan(&id, &un, &admin)
-			users = append(users, map[string]interface{}{"id": id, "username": un, "isAdmin": admin == 1, "isOnlyAdmin": admin == 1 && ac <= 1})
+			var un, pw string
+			rows.Scan(&id, &un, &admin, &pw)
+			users = append(users, map[string]interface{}{
+				"id": id, "username": un, "isAdmin": admin == 1, "isOnlyAdmin": admin == 1 && ac <= 1,
+				"passwordHashType": getPasswordHashType(pw),
+			})
 		}
 		json.NewEncoder(w).Encode(users)
 	case "POST":

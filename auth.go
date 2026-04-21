@@ -15,6 +15,22 @@ func hashPassword(pw string) string {
 	return string(hash)
 }
 
+// getPasswordHashType returns the hashing algorithm type: "bcrypt", "sha256", or "legacy"
+func getPasswordHashType(stored string) string {
+	if strings.HasPrefix(stored, "$2") {
+		return "bcrypt"
+	}
+	parts := strings.SplitN(stored, ":", 2)
+	if len(parts) == 2 {
+		_, err1 := hex.DecodeString(parts[0])
+		_, err2 := hex.DecodeString(parts[1])
+		if err1 == nil && err2 == nil {
+			return "sha256"
+		}
+	}
+	return "legacy"
+}
+
 // verifyPassword checks a stored hash against plaintext password
 // Only accepts bcrypt and legacy SHA-256 (salt:hash) format for migration
 // Plaintext passwords are rejected immediately
