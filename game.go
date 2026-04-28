@@ -79,6 +79,7 @@ type GameSettings struct {
 type Game struct {
 	mu                               sync.Mutex
 	ID, InviteCode, HostID, HostUser string
+	DelegatedTo                      string
 	Phase                            GamePhase
 	ErrorMsg                         string
 	Settings                         GameSettings
@@ -594,6 +595,7 @@ func (g *Game) buildState() map[string]interface{} {
 		"phase": g.Phase, "players": ps, "settings": g.Settings,
 		"hostId": g.HostID, "gameId": g.ID, "inviteCode": g.InviteCode,
 		"currentQuestion": g.CurrentQ, "totalQuestions": tQ, "timeLeft": 0, "someoneLost": g.SomeoneLost, "allWrong": g.AllWrong, "allCorrect": g.AllCorrect,
+		"delegatedTo": g.DelegatedTo,
 	}
 	if g.Settings.Mode == ModeBattleRoyale || g.Settings.Mode == ModeSingleplayer {
 		st["currentDifficulty"] = g.currentDifficulty()
@@ -643,6 +645,15 @@ func (g *Game) broadcastState() {
 	st := g.buildState()
 	g.mu.Unlock()
 	d, _ := json.Marshal(map[string]interface{}{"type": "state", "payload": st})
+	g.connMu.Lock()
+	defer g.connMu.Unlock()
+	for _, c := range g.connections {
+		c.WriteMessage(websocket.TextMessage, d)
+	}
+}
+
+func (g *Game) broadcastMsg(mt string, pl interface{}) {
+	d, _ := json.Marshal(map[string]interface{}{"type": mt, "payload": pl})
 	g.connMu.Lock()
 	defer g.connMu.Unlock()
 	for _, c := range g.connections {

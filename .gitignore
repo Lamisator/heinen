@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# Deploy script (contains server credentials)
+deploy.sh
+
 # Editor/IDE
 # .idea/
 # .vscode/

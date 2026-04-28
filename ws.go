@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -37,12 +39,7 @@ func wsError(conn *websocket.Conn, msg string) {
 }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
-	// Verify authentication before upgrading WebSocket
 	authUser := getSessionUser(r)
-	if authUser == "" {
-		http.Error(w, "Unauthorized", 401)
-		return
-	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -92,6 +89,10 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			continue
 
 		case "create_game":
+			if authUser == "" {
+				wsError(conn, "Nicht eingeloggt")
+				continue
+			}
 			var p struct{ Name string }
 			json.Unmarshal(msg.Payload, &p)
 			playerID = uuid.New().String()[:12]
@@ -183,9 +184,10 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			gamesMu.Lock()
 			g, ok := games[curInvite]
 			gamesMu.Unlock()
-			if !ok || playerID != g.HostID {
+			if !ok || (playerID != g.HostID && playerID != g.DelegatedTo) {
 				continue
 			}
+			isDelegated := playerID != g.HostID
 			var s struct {
 				Topic, Difficulty, StartDifficulty, Mode, LobbyName, LobbyMode, LobbyPassword string
 				NumQuestions, TimePerQ, NumOptions, NumTeeth                                  int
@@ -202,53 +204,55 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			if s.StartDifficulty != "" {
 				g.Settings.StartDifficulty = s.StartDifficulty
 			}
-			if s.NumQuestions > 0 {
-				g.Settings.NumQuestions = s.NumQuestions
-			}
-			if s.TimePerQ > 0 {
-				g.Settings.TimePerQ = s.TimePerQ
-			}
-			if s.NumOptions >= 2 {
-				g.Settings.NumOptions = s.NumOptions
-			}
-			if s.NumTeeth > 0 {
-				g.Settings.NumTeeth = s.NumTeeth
-				if g.Phase == PhaseLobby {
-					for _, p := range g.Players {
-						p.Teeth = s.NumTeeth
-						p.MaxTeeth = s.NumTeeth
+			if !isDelegated {
+				if s.NumQuestions > 0 {
+					g.Settings.NumQuestions = s.NumQuestions
+				}
+				if s.TimePerQ > 0 {
+					g.Settings.TimePerQ = s.TimePerQ
+				}
+				if s.NumOptions >= 2 {
+					g.Settings.NumOptions = s.NumOptions
+				}
+				if s.NumTeeth > 0 {
+					g.Settings.NumTeeth = s.NumTeeth
+					if g.Phase == PhaseLobby {
+						for _, p := range g.Players {
+							p.Teeth = s.NumTeeth
+							p.MaxTeeth = s.NumTeeth
+						}
 					}
 				}
-			}
-			if s.Mode != "" {
-				m := GameMode(s.Mode)
-				if m == ModeSingleplayer && len(g.Players) > 1 {
-					m = ModeClassic
+				if s.Mode != "" {
+					m := GameMode(s.Mode)
+					if m == ModeSingleplayer && len(g.Players) > 1 {
+						m = ModeClassic
+					}
+					if m == ModeClassic || m == ModeElimination || m == ModeBattleRoyale || m == ModeSingleplayer {
+						g.Settings.Mode = m
+					}
 				}
-				if m == ModeClassic || m == ModeElimination || m == ModeBattleRoyale || m == ModeSingleplayer {
-					g.Settings.Mode = m
+				if s.ShowTutorial != nil {
+					g.Settings.ShowTutorial = *s.ShowTutorial
 				}
-			}
-			if s.ShowTutorial != nil {
-				g.Settings.ShowTutorial = *s.ShowTutorial
-			}
-			if s.LobbyName != "" {
-				g.Settings.LobbyName = s.LobbyName
-			}
-			if s.LobbyMode != "" {
-				lm := LobbyMode(s.LobbyMode)
-				if lm == LobbyInvite || lm == LobbyPassword || lm == LobbyOpen {
-					g.Settings.LobbyMode = lm
+				if s.LobbyName != "" {
+					g.Settings.LobbyName = s.LobbyName
 				}
-			}
-			if s.LobbyPassword != "" {
-				g.Settings.LobbyPassword = s.LobbyPassword
-			}
-			if s.WebSearch != nil {
-				g.Settings.WebSearch = *s.WebSearch
-			}
-			if s.PlayIntro != nil {
-				g.Settings.PlayIntro = *s.PlayIntro
+				if s.LobbyMode != "" {
+					lm := LobbyMode(s.LobbyMode)
+					if lm == LobbyInvite || lm == LobbyPassword || lm == LobbyOpen {
+						g.Settings.LobbyMode = lm
+					}
+				}
+				if s.LobbyPassword != "" {
+					g.Settings.LobbyPassword = s.LobbyPassword
+				}
+				if s.WebSearch != nil {
+					g.Settings.WebSearch = *s.WebSearch
+				}
+				if s.PlayIntro != nil {
+					g.Settings.PlayIntro = *s.PlayIntro
+				}
 			}
 			g.mu.Unlock()
 			g.broadcastState()
@@ -275,6 +279,11 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			g.connMu.Unlock()
 			g.removePlayer(p.PlayerID)
+			g.mu.Lock()
+			if g.DelegatedTo == p.PlayerID {
+				g.DelegatedTo = ""
+			}
+			g.mu.Unlock()
 			g.broadcastState()
 			go cleanupIfEmpty(curInvite)
 
@@ -295,6 +304,55 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				logInfo(wsIP, g.HostUser, "HOST_TRANSFER", fmt.Sprintf("invite=%s new_host=%s", curInvite, p.PlayerID))
 			}
 			g.mu.Unlock()
+			g.broadcastState()
+
+		case "delegate_settings":
+			gamesMu.Lock()
+			g, ok := games[curInvite]
+			gamesMu.Unlock()
+			if !ok || playerID != g.HostID || g.Phase != PhaseLobby {
+				continue
+			}
+			var p struct {
+				PlayerID string `json:"playerId"`
+			}
+			json.Unmarshal(msg.Payload, &p)
+			g.mu.Lock()
+			isRandom := p.PlayerID == "random"
+			if isRandom {
+				var candidates []string
+				for _, pid := range g.PlayerOrder {
+					if pid != g.HostID {
+						if pl, ok2 := g.Players[pid]; ok2 && pl.Connected {
+							candidates = append(candidates, pid)
+						}
+					}
+				}
+				if len(candidates) > 0 {
+					n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(candidates))))
+					g.DelegatedTo = candidates[n.Int64()]
+				}
+			} else if p.PlayerID == "" {
+				g.DelegatedTo = ""
+			} else if _, exists := g.Players[p.PlayerID]; exists && p.PlayerID != g.HostID {
+				g.DelegatedTo = p.PlayerID
+			}
+			winnerID := g.DelegatedTo
+			playerNames := make([]map[string]string, 0)
+			for _, pid := range g.PlayerOrder {
+				if pid != g.HostID {
+					if pl, ok2 := g.Players[pid]; ok2 {
+						playerNames = append(playerNames, map[string]string{"id": pid, "name": pl.Name})
+					}
+				}
+			}
+			g.mu.Unlock()
+			if isRandom && winnerID != "" {
+				g.broadcastMsg("shuffle_animation", map[string]interface{}{
+					"winnerId": winnerID,
+					"players":  playerNames,
+				})
+			}
 			g.broadcastState()
 
 		case "start_game":
@@ -364,6 +422,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			g.prefetchFailed = false
 			g.prefetchErr = ""
 			g.ErrorMsg = ""
+			g.DelegatedTo = ""
 			for _, p := range g.Players {
 				p.Teeth = g.Settings.NumTeeth
 				p.MaxTeeth = g.Settings.NumTeeth
@@ -395,6 +454,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				g.prefetchFailed = false
 				g.prefetchErr = ""
 				g.ErrorMsg = ""
+				g.DelegatedTo = ""
 				for _, p := range g.Players {
 					p.Teeth = g.Settings.NumTeeth
 					p.MaxTeeth = g.Settings.NumTeeth

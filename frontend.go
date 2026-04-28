@@ -36,7 +36,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .cc{max-width:520px;margin:20px auto}.sp{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px}.spt{font-size:.8rem;color:var(--text2);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px}.sg{display:grid;grid-template-columns:1fr 1fr;gap:12px}.sg .ig{margin-bottom:0}.sg input,.sg select{padding:9px 11px;font-size:.9rem}
 .lobby-container{max-width:800px;margin:16px auto}.gcd{text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:18px}.gcl{font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:3px;margin-bottom:4px}.il{font-family:'Space Mono',monospace;font-size:.7rem;color:var(--gold);word-break:break-all;cursor:pointer;padding:8px 12px;background:var(--bg2);border-radius:6px;margin-top:8px;display:inline-block}.il:hover{text-decoration:underline}
 .pst{font-size:.8rem;color:var(--text2);text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}.pg{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}
-.pc{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;position:relative;transition:all .3s}.pc.eliminated{opacity:.45;border-color:var(--wrong)}.pc.disconnected{opacity:.35}.pc.is-me{border-color:var(--accent);border-width:2px}.pn{font-weight:600;font-size:.9rem;margin-bottom:3px}.ps{font-size:.6rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}.ps.host{color:var(--gold)}.ps.elim{color:var(--wrong)}
+.pc{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;position:relative;transition:all .3s}.pc.eliminated{opacity:.45;border-color:var(--wrong)}.pc.disconnected{opacity:.35}.pc.is-me{border-color:var(--accent);border-width:2px}.pn{font-weight:600;font-size:.9rem;margin-bottom:3px}.ps{font-size:.6rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}.ps.host{color:var(--gold)}.ps.elim{color:var(--wrong)}.ps.delegate{color:var(--accent2)}
 .teeth-wrap{position:relative;padding:8px 0;min-height:60px}.teeth-rows{display:flex;flex-direction:column;align-items:center;gap:2px}.tooth-row{display:flex;justify-content:center;gap:2px}.tooth{width:14px;height:20px;transition:all .4s cubic-bezier(.68,-.55,.265,1.55)}.tooth.upper{border-radius:3px 3px 7px 7px}.tooth.lower{border-radius:7px 7px 3px 3px}.tooth.alive{background:linear-gradient(180deg,var(--tooth-white) 0%,#d8d4c8 100%);box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.4)}.tooth.dead{background:var(--tooth-dead);box-shadow:inset 0 2px 4px rgba(0,0,0,.5)}.tooth.upper.just-lost{animation:tf-down .7s ease-in forwards}.tooth.lower.just-lost{animation:tf-up .7s ease-in forwards}
 @keyframes tf-down{0%{transform:translateY(0) rotate(0);opacity:1}40%{transform:translateY(12px) rotate(-10deg);opacity:.9}100%{transform:translateY(20px) rotate(15deg);opacity:.5;background:var(--tooth-dead)}}
 @keyframes tf-up{0%{transform:translateY(0) rotate(0);opacity:1}40%{transform:translateY(-12px) rotate(10deg);opacity:.9}100%{transform:translateY(-20px) rotate(-15deg);opacity:.5;background:var(--tooth-dead)}}
@@ -199,7 +199,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <audio id="bg-audio" preload="auto" loop></audio>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
-let ws=null,myId='',inviteCode='',gameState=null,selectedAnswer=-1,timerInterval=null,currentTimeLeft=0;
+let ws=null,myId='',inviteCode='',gameState=null,selectedAnswer=-1,timerInterval=null,currentTimeLeft=0,shuffleAnimating=false;
 let currentUser=null,joinPending='',joinNeedsPw=false,joinLobbyPw='';
 let globalSounds={},bgMuted=false,bgStarted=false,tutorialHtml='';
 const DL={leicht:'Leicht',mittel:'Mittel',schwer:'Schwer',extrem:'Extrem'};
@@ -388,8 +388,9 @@ function connectWS(){if(ws&&ws.readyState<=1)return;const proto=location.protoco
 function send(t,p){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:t,payload:p}))}
 function handleMessage(msg){switch(msg.type){
   case 'joined':case 'reconnected':myId=msg.payload.playerId;inviteCode=msg.payload.inviteCode;sessionStorage.setItem('h_invite',inviteCode);break;
-  case 'state':gameState=msg.payload;renderGame();break;case 'error':showToast(msg.payload.message,1);break;
-  case 'kicked':showToast(msg.payload.message,1);gameState=null;stopBg();sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');showScreen('home');break}}
+  case 'state':gameState=msg.payload;if(!shuffleAnimating)renderGame();break;case 'error':showToast(msg.payload.message,1);break;
+  case 'kicked':showToast(msg.payload.message,1);gameState=null;stopBg();sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');showScreen('home');break;
+  case 'shuffle_animation':shuffleAnimation(msg.payload);break}}
 
 function joinLobby(code,mode){joinPending=code;joinNeedsPw=mode==='pw';document.getElementById('join-pw-group').style.display=joinNeedsPw?'block':'none';showScreen('join')}
 function joinByCode(){const code=document.getElementById('home-invite').value.trim();if(!code){showToast('Code eingeben',1);return};joinPending=code;joinNeedsPw=false;document.getElementById('join-pw-group').style.display='none';showScreen('join')}
@@ -408,13 +409,56 @@ function transferHost(pid){if(confirm('Host-Rechte übertragen?'))send('transfer
 function playAgain(){send('play_again',{})}
 function leaveGame(){send('leave_game',{})}
 function copyInvite(){navigator.clipboard.writeText(location.origin+'/?join='+inviteCode).then(()=>showToast('Kopiert!',0))}
-function sendLS(){const s={};const ids={Topic:'l-topic',Difficulty:'l-diff',StartDifficulty:'l-startdiff',Mode:'l-mode',NumQuestions:'l-questions',TimePerQ:'l-time',NumOptions:'l-options',NumTeeth:'l-teeth',LobbyName:'l-lobbyname',LobbyMode:'l-lobbymode',LobbyPassword:'l-lobbypw'};for(const[k,id] of Object.entries(ids)){const el=document.getElementById(id);if(!el)continue;if(['NumQuestions','TimePerQ','NumOptions','NumTeeth'].includes(k))s[k]=parseInt(el.value)||0;else s[k]=el.value}
-const tc=document.getElementById('l-tutorial');if(tc)s.ShowTutorial=tc.checked;
-const ws=document.getElementById('l-websearch');if(ws)s.WebSearch=ws.checked;
-const pi=document.getElementById('l-playintro');if(pi)s.PlayIntro=pi.checked;
-send('update_settings',s)}
+function sendLS(){
+  const isDelegated=gameState&&gameState.delegatedTo===myId&&myId!==gameState.hostId;
+  const s={};
+  const allIds={Topic:'l-topic',Difficulty:'l-diff',StartDifficulty:'l-startdiff',Mode:'l-mode',NumQuestions:'l-questions',TimePerQ:'l-time',NumOptions:'l-options',NumTeeth:'l-teeth',LobbyName:'l-lobbyname',LobbyMode:'l-lobbymode',LobbyPassword:'l-lobbypw'};
+  const delegateIds={Topic:'l-topic',Difficulty:'l-diff',StartDifficulty:'l-startdiff'};
+  const ids=isDelegated?delegateIds:allIds;
+  for(const[k,id] of Object.entries(ids)){const el=document.getElementById(id);if(!el)continue;if(['NumQuestions','TimePerQ','NumOptions','NumTeeth'].includes(k))s[k]=parseInt(el.value)||0;else s[k]=el.value}
+  if(!isDelegated){const tc=document.getElementById('l-tutorial');if(tc)s.ShowTutorial=tc.checked;
+  const ws2=document.getElementById('l-websearch');if(ws2)s.WebSearch=ws2.checked;
+  const pi=document.getElementById('l-playintro');if(pi)s.PlayIntro=pi.checked;}
+  send('update_settings',s)}
 
 function amIAlive(){if(!gameState)return true;const me=gameState.players.find(p=>p.id===myId);return me?me.alive:true}
+
+function delegateSettings(pid){send('delegate_settings',{playerId:pid})}
+
+function shuffleAnimation(data){
+  shuffleAnimating=true;
+  const players=data.players||[];const winnerId=data.winnerId;
+  const names=players.map(p=>p.name);if(!names.length){shuffleAnimating=false;renderGame();return}
+  const overlay=document.createElement('div');
+  overlay.id='shuffle-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(10,10,15,.96);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;animation:so-in .3s ease';
+  overlay.innerHTML='<style>@keyframes so-in{from{opacity:0}to{opacity:1}}@keyframes so-glow{0%,100%{text-shadow:0 0 20px rgba(255,215,0,.6)}50%{text-shadow:0 0 40px rgba(255,215,0,1),0 0 80px rgba(255,215,0,.4)}}</style>'
+    +'<div style="font-size:.75rem;color:var(--text2);letter-spacing:3px;text-transform:uppercase">Auswahl wird delegiert...</div>'
+    +'<div id="shuffle-name" style="font-family:\'Space Mono\',monospace;font-size:2.6rem;font-weight:700;color:var(--accent);text-align:center;min-height:3.5rem;display:flex;align-items:center;justify-content:center;transition:opacity .08s;max-width:90vw;word-break:break-word"></div>'
+    +'<div id="shuffle-sub" style="font-size:.85rem;color:var(--text2);display:none">darf Thema &amp; Schwierigkeit wählen</div>';
+  document.body.appendChild(overlay);
+  const nameEl=document.getElementById('shuffle-name');
+  const subEl=document.getElementById('shuffle-sub');
+  const winnerName=(players.find(p=>p.id===winnerId)||{}).name||'';
+  const totalSteps=28;let step=0;
+  function nextStep(){
+    if(step<totalSteps){
+      nameEl.textContent=names[Math.floor(Math.random()*names.length)];
+      const delay=40+Math.pow(step/totalSteps,2)*320;
+      step++;setTimeout(nextStep,delay);
+    } else {
+      nameEl.textContent=winnerName;
+      nameEl.style.color='var(--gold)';
+      nameEl.style.animation='so-glow 1.5s ease-in-out infinite';
+      subEl.style.display='block';
+      setTimeout(()=>{
+        overlay.style.transition='opacity .5s';overlay.style.opacity='0';
+        setTimeout(()=>{overlay.remove();shuffleAnimating=false;renderGame()},500);
+      },2500);
+    }
+  }
+  nextStep();
+}
 
 let lastPhase='';
 function renderGame(){if(!gameState)return;const ph=gameState.phase,isHost=myId===gameState.hostId;
@@ -437,6 +481,9 @@ function renderLobby(isHost){
   const link=location.origin+'/?join='+inviteCode;document.getElementById('invite-link').textContent=link;
   const qrEl=document.getElementById('qr-code');qrEl.innerHTML='';try{new QRCode(qrEl,{text:link,width:180,height:180,colorDark:'#e4e4ef',colorLight:'#0a0a0f'})}catch(e){}
   const s=gameState.settings,players=gameState.players||[],spLocked=players.filter(p=>p.connected).length>1;
+  const delegatedTo=gameState.delegatedTo||'';
+  const delegatedPlayer=delegatedTo?players.find(p=>p.id===delegatedTo):null;
+  const amIDelegated=delegatedTo===myId&&!isHost;
   if(isHost){
     const dOpts=['leicht','mittel','schwer','extrem'].map(d=>'<option value="'+d+'"'+(s.difficulty===d?' selected':'')+'>'+DL[d]+'</option>').join('');
     const sdOpts=['leicht','mittel','schwer','extrem'].map(d=>'<option value="'+d+'"'+((s.startDifficulty||'leicht')===d?' selected':'')+'>'+DL[d]+'</option>').join('');
@@ -444,21 +491,52 @@ function renderLobby(isHost){
     const lmOpts='<option value="invite"'+(s.lobbyMode==='invite'?' selected':'')+'>Nur Einladung</option><option value="password"'+(s.lobbyMode==='password'?' selected':'')+'>Mit Passwort</option><option value="open"'+(s.lobbyMode==='open'?' selected':'')+'>Offen</option>';
     const isKFO=s.mode==='kfo_battle_royale'||s.mode==='kfo_singleplayer',isEndless=s.mode!=='classic';
     const oOpts=[2,3,4].map(n=>'<option value="'+n+'"'+(s.numOptions===n?' selected':'')+'>'+n+'</option>').join('');
+    const topicDiffHtml=delegatedTo
+      ?'<div class="ig" style="grid-column:1/-1"><div style="background:rgba(255,107,157,.1);border:1px solid rgba(255,107,157,.3);border-radius:8px;padding:8px 12px;font-size:.75rem;color:var(--accent2);margin-bottom:8px">&#9997; '+esc(delegatedPlayer?delegatedPlayer.name:'...')+' w\u00e4hlt Thema &amp; Schwierigkeit</div>'
+       +'<div class="sv-grid" style="margin-top:4px"><div class="sv-item"><span class="sv-label">Thema</span><span class="sv-value">'+esc(s.topic)+'</span></div>'
+       +(!isKFO?'<div class="sv-item"><span class="sv-label">Schwierigkeit</span><span class="sv-value">'+(DL[s.difficulty]||s.difficulty)+'</span></div>':'')
+       +(isKFO?'<div class="sv-item"><span class="sv-label">Start-Schwierigkeit</span><span class="sv-value">'+(DL[s.startDifficulty||'leicht']||s.startDifficulty)+'</span></div>':'')
+       +'</div></div>'
+      :'<div class="ig"><label>Thema</label><input type="text" id="l-topic" value="'+esc(s.topic)+'" onchange="sendLS()"/></div>'
+       +(!isKFO?'<div class="ig"><label>Schwierigkeit</label><select id="l-diff" onchange="sendLS()">'+dOpts+'</select></div>':'')
+       +(isKFO?'<div class="ig"><label>Start-Schwierigkeit</label><select id="l-startdiff" onchange="sendLS()">'+sdOpts+'</select></div>':'');
+    const otherPlayers=players.filter(p=>p.id!==gameState.hostId&&p.connected);
+    const delegateHtml=delegatedTo
+      ?'<div class="spt" style="margin-top:18px;margin-bottom:10px">Auswahl delegiert</div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="color:var(--accent2);font-size:.85rem">'+esc(delegatedPlayer?delegatedPlayer.name:'...')+' darf w\u00e4hlen</span><button class="btn btn-s btn-sm" onclick="delegateSettings(\'\')">Zur\u00fcknehmen</button></div>'
+      :otherPlayers.length
+        ?'<div class="spt" style="margin-top:18px;margin-bottom:10px">Auswahl delegieren</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="l-delegate-pid" style="flex:1;min-width:120px;padding:9px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:Outfit,sans-serif;font-size:.9rem;outline:none">'+otherPlayers.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select><button class="btn btn-s btn-sm" onclick="delegateSettings(document.getElementById(\'l-delegate-pid\').value)">Delegieren</button><button class="btn btn-s btn-sm" onclick="delegateSettings(\'random\')">\u{1F3B2} Zuf\u00e4llig</button></div>'
+        :'';
     document.getElementById('lobby-settings').innerHTML='<div class="sp"><div class="spt">Einstellungen</div><div class="sg">'
       +'<div class="ig"><label>Lobby-Name</label><input type="text" id="l-lobbyname" value="'+esc(s.lobbyName||'')+'" onchange="sendLS()" maxlength="30"/></div>'
       +'<div class="ig"><label>Lobby-Modus</label><select id="l-lobbymode" onchange="sendLS()">'+lmOpts+'</select></div>'
       +(s.lobbyMode==='password'?'<div class="ig"><label>Lobby-Passwort</label><input type="password" id="l-lobbypw" value="'+esc(s.lobbyPassword||'')+'" onchange="sendLS()"/></div>':'')
-      +'<div class="ig"><label>Thema</label><input type="text" id="l-topic" value="'+esc(s.topic)+'" onchange="sendLS()"/></div>'
-      +(!isKFO?'<div class="ig"><label>Schwierigkeit</label><select id="l-diff" onchange="sendLS()">'+dOpts+'</select></div>':'')
-      +(isKFO?'<div class="ig"><label>Start-Schwierigkeit</label><select id="l-startdiff" onchange="sendLS()">'+sdOpts+'</select></div>':'')
+      +topicDiffHtml
       +'<div class="ig"><label>Modus</label><select id="l-mode" onchange="sendLS()">'+mOpts+'</select></div>'
       +(!isEndless?'<div class="ig"><label>Fragen</label><input type="number" id="l-questions" value="'+s.numQuestions+'" min="1" max="50" onchange="sendLS()"/></div>':'')
       +'<div class="ig"><label>Zeit (Sek.)</label><input type="number" id="l-time" value="'+s.timePerQuestion+'" min="5" max="120" onchange="sendLS()"/></div>'
       +'<div class="ig"><label>Optionen</label><select id="l-options" onchange="sendLS()">'+oOpts+'</select></div>'
-      +'<div class="ig"><label>Zähne</label><input type="number" id="l-teeth" value="'+s.numTeeth+'" min="1" max="20" onchange="sendLS()"/></div>'
-      +'</div><div class="ig" style="margin-top:8px"><label><input type="checkbox" id="l-tutorial"'+(s.showTutorial?' checked':'')+' onchange="sendLS()"/>Tutorial anzeigen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-playintro"'+(s.playIntro!==false?' checked':'')+' onchange="sendLS()"/>Intro-Sound abspielen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-websearch"'+(s.webSearch?' checked':'')+' onchange="sendLS()"/>Internet-Recherche für Fragen</label></div></div>';
+      +'<div class="ig"><label>Z\u00e4hne</label><input type="number" id="l-teeth" value="'+s.numTeeth+'" min="1" max="20" onchange="sendLS()"/></div>'
+      +'</div><div class="ig" style="margin-top:8px"><label><input type="checkbox" id="l-tutorial"'+(s.showTutorial?' checked':'')+' onchange="sendLS()"/>Tutorial anzeigen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-playintro"'+(s.playIntro!==false?' checked':'')+' onchange="sendLS()"/>Intro-Sound abspielen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-websearch"'+(s.webSearch?' checked':'')+' onchange="sendLS()"/>Internet-Recherche f\u00fcr Fragen</label></div>'
+      +delegateHtml+'</div>';
+  }else if(amIDelegated){const isKFO2=s.mode==='kfo_battle_royale'||s.mode==='kfo_singleplayer';
+    const dOpts=['leicht','mittel','schwer','extrem'].map(d=>'<option value="'+d+'"'+(s.difficulty===d?' selected':'')+'>'+DL[d]+'</option>').join('');
+    const sdOpts=['leicht','mittel','schwer','extrem'].map(d=>'<option value="'+d+'"'+((s.startDifficulty||'leicht')===d?' selected':'')+'>'+DL[d]+'</option>').join('');
+    document.getElementById('lobby-settings').innerHTML='<div class="sv">'
+      +'<div style="background:rgba(255,107,157,.1);border:1px solid rgba(255,107,157,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.8rem;color:var(--accent2);text-align:center;font-weight:600">&#9997; Du darfst Thema &amp; Schwierigkeit w\u00e4hlen</div>'
+      +'<div class="sg">'
+      +'<div class="ig"><label>Thema</label><input type="text" id="l-topic" value="'+esc(s.topic)+'" onchange="sendLS()"/></div>'
+      +(!isKFO2?'<div class="ig"><label>Schwierigkeit</label><select id="l-diff" onchange="sendLS()">'+dOpts+'</select></div>':'')
+      +(isKFO2?'<div class="ig"><label>Start-Schwierigkeit</label><select id="l-startdiff" onchange="sendLS()">'+sdOpts+'</select></div>':'')
+      +'</div><div class="spt" style="margin-top:14px">Weitere Einstellungen</div><div class="sv-grid">'
+      +'<div class="sv-item"><span class="sv-label">Lobby</span><span class="sv-value">'+esc(s.lobbyName||'-')+'</span></div>'
+      +'<div class="sv-item"><span class="sv-label">Modus</span><span class="sv-value">'+(ML[s.mode]||'Klassisch')+'</span></div>'
+      +(s.mode==='classic'?'<div class="sv-item"><span class="sv-label">Fragen</span><span class="sv-value">'+s.numQuestions+'</span></div>':'')
+      +'<div class="sv-item"><span class="sv-label">Zeit</span><span class="sv-value">'+s.timePerQuestion+' Sek.</span></div>'
+      +'<div class="sv-item"><span class="sv-label">Z\u00e4hne</span><span class="sv-value">'+s.numTeeth+'</span></div>'
+      +'</div></div>';
   }else{const isKFO2=s.mode==='kfo_battle_royale'||s.mode==='kfo_singleplayer';
-    document.getElementById('lobby-settings').innerHTML='<div class="sv"><div class="spt">Spieleinstellungen</div><div class="sv-grid">'
+    const delegateNotice=delegatedTo&&delegatedPlayer?'<div style="background:rgba(255,107,157,.08);border:1px solid rgba(255,107,157,.25);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:.75rem;color:var(--accent2)">&#9997; '+esc(delegatedPlayer.name)+' w\u00e4hlt Thema &amp; Schwierigkeit</div>':'';
+    document.getElementById('lobby-settings').innerHTML='<div class="sv">'+delegateNotice+'<div class="spt">Spieleinstellungen</div><div class="sv-grid">'
       +'<div class="sv-item"><span class="sv-label">Lobby</span><span class="sv-value">'+esc(s.lobbyName||'-')+'</span></div>'
       +'<div class="sv-item"><span class="sv-label">Thema</span><span class="sv-value">'+esc(s.topic)+'</span></div>'
       +(!isKFO2?'<div class="sv-item"><span class="sv-label">Schwierigkeit</span><span class="sv-value">'+(DL[s.difficulty]||'Mittel')+'</span></div>':'')
@@ -466,11 +544,18 @@ function renderLobby(isHost){
       +'<div class="sv-item"><span class="sv-label">Modus</span><span class="sv-value">'+(ML[s.mode]||'Klassisch')+'</span></div>'
       +(s.mode==='classic'?'<div class="sv-item"><span class="sv-label">Fragen</span><span class="sv-value">'+s.numQuestions+'</span></div>':'')
       +'<div class="sv-item"><span class="sv-label">Zeit</span><span class="sv-value">'+s.timePerQuestion+' Sek.</span></div>'
-      +'<div class="sv-item"><span class="sv-label">Zähne</span><span class="sv-value">'+s.numTeeth+'</span></div>'
+      +'<div class="sv-item"><span class="sv-label">Z\u00e4hne</span><span class="sv-value">'+s.numTeeth+'</span></div>'
       +'</div></div>'}
   document.getElementById('players-count').textContent='Spieler*innen ('+players.length+')';
-  document.getElementById('lobby-players').innerHTML=players.map(p=>{const isH=p.id===gameState.hostId,isMe=p.id===myId;return '<div class="pc'+(p.connected?'':' disconnected')+(isMe?' is-me':'')+'">'+(isHost&&!isH?'<button class="kick-btn" onclick="kickPlayer(\''+p.id+'\')" title="Entfernen">&#10005;</button><button class="kick-btn" style="top:5px;right:25px" onclick="transferHost(\''+p.id+'\')" title="Host übertragen">&#128081;</button>':'')+'<div class="pn">'+esc(p.name)+(isMe?' (Du)':'')+'</div><div class="ps'+(isH?' host':'')+'">'+
-    (isH?'Host':(p.connected?'Bereit':'Getrennt'))+'</div>'+renderTeeth(p,false,false,false)+'</div>'}).join('');
+  document.getElementById('lobby-players').innerHTML=players.map(p=>{
+    const isH=p.id===gameState.hostId,isMe=p.id===myId,isD=delegatedTo&&p.id===delegatedTo;
+    return '<div class="pc'+(p.connected?'':' disconnected')+(isMe?' is-me':'')+'">'
+      +(isHost&&!isH?'<button class="kick-btn" onclick="kickPlayer(\''+p.id+'\')" title="Entfernen">&#10005;</button><button class="kick-btn" style="top:5px;right:25px" onclick="transferHost(\''+p.id+'\')" title="Host \u00fcbertragen">&#128081;</button>':'')
+      +'<div class="pn">'+esc(p.name)+(isMe?' (Du)':'')+'</div>'
+      +'<div class="ps'+(isH?' host':isD?' delegate':'')+'">'+
+        (isH?'Host':isD?'W\u00e4hlt Thema':(p.connected?'Bereit':'Getrennt'))
+      +'</div>'+renderTeeth(p,false,false,false)+'</div>';
+  }).join('');
   document.getElementById('start-btn-container').style.display=(isHost&&players.length>=1)?'block':'none'}
 
 function renderTeeth(p,anim,showLost,showDead){let upper=[],lower=[];for(let i=0;i<p.maxTeeth;i++){const alive=i<p.teeth,lost=anim&&p.justLost&&i===p.teeth;const row=i%2===0?'upper':'lower';const cls='tooth '+row+(alive?' alive':' dead')+(lost?' just-lost':'');if(i%2===0)upper.push('<div class="'+cls+'"></div>');else lower.push('<div class="'+cls+'"></div>')}
