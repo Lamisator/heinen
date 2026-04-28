@@ -478,8 +478,9 @@ function renderGame(){if(!gameState)return;const ph=gameState.phase,isHost=myId=
 function renderTutorial(isHost){document.getElementById('tutorial-content').innerHTML=tutorialHtml||'<p>Lade Tutorial...</p>';document.getElementById('tutorial-actions').innerHTML=isHost?'<button class="btn btn-p" onclick="skipTutorial()" style="max-width:280px">Weiter</button>':'<div style="color:var(--text2);font-size:.85rem">Warte auf den*die Host...</div>'}
 
 function renderLobby(isHost){
-  const link=location.origin+'/?join='+inviteCode;document.getElementById('invite-link').textContent=link;
-  const qrEl=document.getElementById('qr-code');qrEl.innerHTML='';try{new QRCode(qrEl,{text:link,width:180,height:180,colorDark:'#e4e4ef',colorLight:'#0a0a0f'})}catch(e){}
+  const invBox=document.querySelector('.gcd');if(invBox)invBox.style.display=isHost?'':'none';
+  if(isHost){const link=location.origin+'/?join='+inviteCode;document.getElementById('invite-link').textContent=link;
+  const qrEl=document.getElementById('qr-code');qrEl.innerHTML='';try{new QRCode(qrEl,{text:link,width:180,height:180,colorDark:'#e4e4ef',colorLight:'#0a0a0f'})}catch(e){}}
   const s=gameState.settings,players=gameState.players||[],spLocked=players.filter(p=>p.connected).length>1;
   const delegatedTo=gameState.delegatedTo||'';
   const delegatedPlayer=delegatedTo?players.find(p=>p.id===delegatedTo):null;
