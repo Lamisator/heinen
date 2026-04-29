@@ -8,9 +8,15 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
+
+type generateResult struct {
+	Questions     []Question
+	FilteredCount int
+}
 
 var difficultyPrompts = map[string]string{
 	"leicht": "LEICHT – Allgemeinwissen, das die meisten kennen.",
@@ -61,7 +67,7 @@ REGELN: Konkrete Fragen/Antworten, KEINE Platzhalter. Antwort NICHT trivial able
 NUR JSON-Array: [{"text":"Frage?","options":["A","B","C","D"],"correct":0}]`, count, topic, nO, dt, excl)
 }
 
-func generateQuestions(topic, diff string, count, nO int, prev []string, webSearch bool) ([]Question, error) {
+func generateQuestions(topic, diff string, count, nO int, prev []string, webSearch bool) (generateResult, error) {
 	prov := getSetting("ai_provider")
 	model := getSetting("ai_model")
 	key := ""
@@ -73,7 +79,7 @@ func generateQuestions(topic, diff string, count, nO int, prev []string, webSear
 	}
 	if key == "" {
 		logWarn("system", "system", "AI_NO_KEY", "no API key configured")
-		return nil, fmt.Errorf("Kein API-Schlüssel im Admin-Panel konfiguriert. Bitte an den*die Administrator*in wenden.")
+		return generateResult{}, fmt.Errorf("Kein API-Schlüssel im Admin-Panel konfiguriert. Bitte an den*die Administrator*in wenden.")
 	}
 	rc := count + 5
 	if rc > 50 {
@@ -94,7 +100,7 @@ func generateQuestions(topic, diff string, count, nO int, prev []string, webSear
 	}
 	if err != nil {
 		logError("system", "system", "AI_ERROR", err.Error())
-		return nil, fmt.Errorf("KI-Anbieter antwortet nicht: %s", err.Error())
+		return generateResult{}, fmt.Errorf("KI-Anbieter antwortet nicht: %s", err.Error())
 	}
 	logInfo("system", "system", "AI_OK", fmt.Sprintf("len=%d", len(text)))
 	rawResponse := text // keep original for error messages
@@ -109,7 +115,7 @@ func generateQuestions(topic, diff string, count, nO int, prev []string, webSear
 	var qs []Question
 	if err := json.Unmarshal([]byte(text), &qs); err != nil {
 		logError("system", "system", "AI_PARSE_ERROR", fmt.Sprintf("err=%s response=%s", err.Error(), rawResponse))
-		return nil, fmt.Errorf("KI-Antwort konnte nicht verarbeitet werden (ungültiges Format).\n\nParse-Fehler: %s\n\nAntwort der KI:\n%s", err.Error(), aiPreview(rawResponse))
+		return generateResult{}, fmt.Errorf("KI-Antwort konnte nicht verarbeitet werden (ungültiges Format).\n\nParse-Fehler: %s\n\nAntwort der KI:\n%s", err.Error(), aiPreview(rawResponse))
 	}
 	fl := make([]Question, 0, len(qs))
 	for _, q := range qs {
@@ -123,7 +129,7 @@ func generateQuestions(topic, diff string, count, nO int, prev []string, webSear
 	qs = fl
 	if len(qs) == 0 {
 		logError("system", "system", "AI_NO_VALID_Q", fmt.Sprintf("response=%s", rawResponse))
-		return nil, fmt.Errorf("KI-Antwort enthielt keine verwertbaren Fragen.\n\nAntwort der KI:\n%s", aiPreview(rawResponse))
+		return generateResult{}, fmt.Errorf("KI-Antwort enthielt keine verwertbaren Fragen.\n\nAntwort der KI:\n%s", aiPreview(rawResponse))
 	}
 	// If fewer than requested, that's still OK — use what we got
 	if len(qs) > count {
@@ -132,7 +138,27 @@ func generateQuestions(topic, diff string, count, nO int, prev []string, webSear
 	for i := range qs {
 		qs[i] = shuffleOpts(qs[i])
 	}
-	return qs, nil
+
+	var result generateResult
+	dedupThreshold := 0.85
+	if ts := getSetting("dedup_similarity_threshold"); ts != "" {
+		if v, _ := strconv.ParseFloat(ts, 64); v > 0 && v <= 1 {
+			dedupThreshold = v
+		}
+	}
+	if existing, err := loadPreparedForTopicDiff(topic, diff, 500); err == nil && len(existing) > 0 {
+		var filtered int
+		qs, filtered = filterNewQuestions(qs, existing, dedupThreshold)
+		if filtered > 0 {
+			logInfo("system", "system", "DEDUP_FILTER",
+				fmt.Sprintf("topic=%s diff=%s removed=%d kept=%d", topic, diff, filtered, len(qs)))
+		}
+		result.FilteredCount = filtered
+	}
+
+	go saveQuestionsBulk(qs, diff, topic, prov, model, nO)
+	result.Questions = qs
+	return result, nil
 }
 
 // webSearchModelFor maps a configured OpenAI model to the corresponding search-capable model.

@@ -191,7 +191,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			var s struct {
 				Topic, Difficulty, StartDifficulty, Mode, LobbyName, LobbyMode, LobbyPassword string
 				NumQuestions, TimePerQ, NumOptions, NumTeeth                                  int
-				ShowTutorial, WebSearch, PlayIntro                                            *bool
+				ShowTutorial, WebSearch, PlayIntro, AllowAnswerChange                         *bool
 			}
 			json.Unmarshal(msg.Payload, &s)
 			g.mu.Lock()
@@ -252,6 +252,9 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				}
 				if s.PlayIntro != nil {
 					g.Settings.PlayIntro = *s.PlayIntro
+				}
+				if s.AllowAnswerChange != nil {
+					g.Settings.AllowAnswerChange = *s.AllowAnswerChange
 				}
 			}
 			g.mu.Unlock()
@@ -319,18 +322,22 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			json.Unmarshal(msg.Payload, &p)
 			g.mu.Lock()
 			isRandom := p.PlayerID == "random"
+			var selectedID string
 			if isRandom {
 				var candidates []string
 				for _, pid := range g.PlayerOrder {
-					if pid != g.HostID {
-						if pl, ok2 := g.Players[pid]; ok2 && pl.Connected {
-							candidates = append(candidates, pid)
-						}
+					if pl, ok2 := g.Players[pid]; ok2 && pl.Connected {
+						candidates = append(candidates, pid)
 					}
 				}
 				if len(candidates) > 0 {
 					n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(candidates))))
-					g.DelegatedTo = candidates[n.Int64()]
+					selectedID = candidates[n.Int64()]
+					if selectedID == g.HostID {
+						g.DelegatedTo = ""
+					} else {
+						g.DelegatedTo = selectedID
+					}
 				}
 			} else if p.PlayerID == "" {
 				g.DelegatedTo = ""
@@ -338,12 +345,13 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				g.DelegatedTo = p.PlayerID
 			}
 			winnerID := g.DelegatedTo
+			if isRandom && selectedID == g.HostID {
+				winnerID = selectedID
+			}
 			playerNames := make([]map[string]string, 0)
 			for _, pid := range g.PlayerOrder {
-				if pid != g.HostID {
-					if pl, ok2 := g.Players[pid]; ok2 {
-						playerNames = append(playerNames, map[string]string{"id": pid, "name": pl.Name})
-					}
+				if pl, ok2 := g.Players[pid]; ok2 {
+					playerNames = append(playerNames, map[string]string{"id": pid, "name": pl.Name})
 				}
 			}
 			g.mu.Unlock()
@@ -406,6 +414,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			json.Unmarshal(msg.Payload, &p)
 			g.submitAnswer(playerID, p.Answer)
+			g.broadcastState()
 
 		case "play_again":
 			gamesMu.Lock()

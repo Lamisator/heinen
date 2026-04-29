@@ -28,6 +28,7 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 func main() {
 	initLog()
 	initDB()
+	initQuestionsDB()
 
 	// Require secure admin bootstrap: fail if no admin exists and no bootstrap credentials provided
 	if countAdmins() == 0 {
@@ -78,6 +79,11 @@ func main() {
 	mux.HandleFunc("/api/logs", handleLogs)
 	mux.HandleFunc("/api/logs/export", handleLogsExport)
 	mux.HandleFunc("/api/lobbies", handleLobbies)
+	mux.HandleFunc("/api/admin/games", handleGameHistory)
+	mux.HandleFunc("/api/admin/games/", handleGameHistory)
+	mux.HandleFunc("/api/admin/questions", handleAdminQuestions)
+	mux.HandleFunc("/api/admin/questions/generate", handleAdminGenerateQuestions)
+	mux.HandleFunc("/api/questions/report", handleReportQuestion)
 
 	// Static and dynamic
 	mux.HandleFunc("/sounds/", handleSoundFile)

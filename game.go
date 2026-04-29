@@ -72,14 +72,16 @@ type GameSettings struct {
 	LobbyName       string    `json:"lobbyName"`
 	LobbyMode       LobbyMode `json:"lobbyMode"`
 	LobbyPassword   string    `json:"lobbyPassword"`
-	WebSearch       bool      `json:"webSearch"`
-	PlayIntro       bool      `json:"playIntro"`
+	WebSearch          bool      `json:"webSearch"`
+	PlayIntro          bool      `json:"playIntro"`
+	AllowAnswerChange  bool      `json:"allowAnswerChange"`
 }
 
 type Game struct {
 	mu                               sync.Mutex
 	ID, InviteCode, HostID, HostUser string
 	DelegatedTo                      string
+	currentHistoryID                 string
 	Phase                            GamePhase
 	ErrorMsg                         string
 	Settings                         GameSettings
@@ -131,7 +133,7 @@ func newGame(hostID, hostName, hostUser string) *Game {
 			NumQuestions: 10, TimePerQ: 20, NumOptions: 4, NumTeeth: 5,
 			Mode: ModeClassic, ShowTutorial: true,
 			LobbyName: randomLobbyName(), LobbyMode: LobbyInvite,
-			WebSearch: false, PlayIntro: true,
+			WebSearch: false, PlayIntro: true, AllowAnswerChange: true,
 		},
 		Players:     map[string]*Player{hostID: {ID: hostID, Name: hostName, Teeth: 5, MaxTeeth: 5, Alive: true, Answer: -1, Connected: true}},
 		PlayerOrder: []string{hostID},
@@ -287,14 +289,19 @@ func (g *Game) startGame() error {
 		diff = g.Settings.StartDifficulty
 	}
 	logInfo("system", g.HostUser, "GAME_START", fmt.Sprintf("id=%s mode=%s topic=%s diff=%s players=%d websearch=%v", g.ID, g.Settings.Mode, g.Settings.Topic, diff, len(g.Players), g.Settings.WebSearch))
-	qs, err := generateQuestions(g.Settings.Topic, diff, numQ, g.Settings.NumOptions, nil, g.Settings.WebSearch)
+	res, err := generateQuestions(g.Settings.Topic, diff, numQ, g.Settings.NumOptions, nil, g.Settings.WebSearch)
 	if err != nil {
 		g.setError(err.Error())
 		return err
 	}
 	g.mu.Lock()
-	g.Questions = qs
+	g.Questions = res.Questions
 	g.CurrentQ = 0
+	g.currentHistoryID = uuid.New().String()
+	go recordGameStart(g.currentHistoryID, g.HostUser, g.Settings.LobbyName,
+		string(g.Settings.Mode), g.Settings.Topic, g.Settings.Difficulty,
+		g.Settings.StartDifficulty, g.Settings.NumTeeth, g.Settings.TimePerQ,
+		g.Settings.NumOptions, len(g.Players))
 	if g.Settings.ShowTutorial {
 		g.Phase = PhaseTutorial
 		g.mu.Unlock()
@@ -357,14 +364,14 @@ func (g *Game) triggerPrefetch() {
 		topic := g.Settings.Topic
 		ws := g.Settings.WebSearch
 		g.mu.Unlock()
-		qs, err := generateQuestions(topic, diff, 20, nO, prev, ws)
+		res, err := generateQuestions(topic, diff, 20, nO, prev, ws)
 		g.prefetchMu.Lock()
 		if err != nil {
 			g.prefetchFailed = true
 			g.prefetchErr = err.Error()
 			logWarn("system", "system", "PREFETCH_FAIL", err.Error())
 		} else {
-			g.prefetched = qs
+			g.prefetched = res.Questions
 		}
 		g.prefetching = false
 		g.prefetchMu.Unlock()
@@ -378,21 +385,28 @@ func (g *Game) nextQuestion() {
 		return
 	}
 	active := g.countActive()
+	histID := g.currentHistoryID
 	if g.Settings.Mode == ModeSingleplayer && active <= 0 {
+		winners := g.getWinners()
 		g.Phase = PhaseEnd
 		g.mu.Unlock()
+		go recordGameEnd(histID, "end", winners)
 		g.broadcastState()
 		return
 	}
 	if g.isEndless() && g.Settings.Mode != ModeSingleplayer && active <= 1 {
+		winners := g.getWinners()
 		g.Phase = PhaseEnd
 		g.mu.Unlock()
+		go recordGameEnd(histID, "end", winners)
 		g.broadcastState()
 		return
 	}
 	if g.Settings.Mode == ModeClassic && (g.CurrentQ >= len(g.Questions) || active <= 1) {
+		winners := g.getWinners()
 		g.Phase = PhaseEnd
 		g.mu.Unlock()
+		go recordGameEnd(histID, "end", winners)
 		g.broadcastState()
 		return
 	}
@@ -414,6 +428,7 @@ func (g *Game) nextQuestion() {
 			g.Phase = PhaseError
 			g.ErrorMsg = msg
 			g.mu.Unlock()
+			go recordGameEnd(histID, "error", nil)
 			g.broadcastState()
 			return
 		} else {
@@ -423,16 +438,17 @@ func (g *Game) nextQuestion() {
 			ws := g.Settings.WebSearch
 			g.mu.Unlock()
 			g.broadcastState()
-			nq, err := generateQuestions(g.Settings.Topic, diff, 20, g.Settings.NumOptions, prev, ws)
+			res, err := generateQuestions(g.Settings.Topic, diff, 20, g.Settings.NumOptions, prev, ws)
 			g.mu.Lock()
 			if err != nil {
 				g.Phase = PhaseError
 				g.ErrorMsg = err.Error()
 				g.mu.Unlock()
+				go recordGameEnd(histID, "error", nil)
 				g.broadcastState()
 				return
 			}
-			g.Questions = append(g.Questions, nq...)
+			g.Questions = append(g.Questions, res.Questions...)
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -476,7 +492,19 @@ func (g *Game) submitAnswer(pid string, ans int) {
 		return
 	}
 	p, ok := g.Players[pid]
-	if !ok || !p.Alive || !p.Connected || p.Answered {
+	if !ok || !p.Alive || !p.Connected {
+		return
+	}
+	if p.Answered {
+		if !g.Settings.AllowAnswerChange {
+			return
+		}
+		for _, pl := range g.Players {
+			if pl.Alive && pl.Connected && !pl.Answered {
+				p.Answer = ans
+				return
+			}
+		}
 		return
 	}
 	p.Answer = ans
@@ -504,6 +532,22 @@ func (g *Game) evaluateRound() {
 		return
 	}
 	q := g.Questions[g.CurrentQ]
+	roundNum := g.CurrentQ
+	histID := g.currentHistoryID
+	difficulty := g.currentDifficulty()
+	type pSnap struct {
+		name      string
+		teeth     int
+		answer    int
+		answered  bool
+		connected bool
+	}
+	pre := make(map[string]pSnap, len(g.Players))
+	for id, p := range g.Players {
+		if p.Alive {
+			pre[id] = pSnap{p.Name, p.Teeth, p.Answer, p.Answered, p.Connected}
+		}
+	}
 	sl := false
 	correctCount := 0
 	activeCount := 0
@@ -532,7 +576,31 @@ func (g *Game) evaluateRound() {
 	g.AllCorrect = activeCount > 0 && correctCount == activeCount
 	g.Phase = PhaseResults
 	g.CurrentQ++
+	var playerResults []playerRoundResult
+	for id, s := range pre {
+		p, ok := g.Players[id]
+		if !ok {
+			continue
+		}
+		result := "correct"
+		if p.JustLost {
+			if !s.answered || !s.connected {
+				result = "timeout"
+			} else {
+				result = "wrong"
+			}
+		}
+		playerResults = append(playerResults, playerRoundResult{
+			PlayerID: id, PlayerName: s.name,
+			Answer: s.answer, Result: result,
+			TeethBefore: s.teeth, TeethAfter: p.Teeth,
+			Eliminated: p.JustDied,
+		})
+	}
 	g.mu.Unlock()
+	if histID != "" {
+		go recordGameRound(histID, roundNum, q, difficulty, playerResults)
+	}
 	g.broadcastState()
 	go func() { time.Sleep(5 * time.Second); g.nextQuestion() }()
 }
@@ -543,8 +611,11 @@ func (g *Game) forceEnd() {
 		close(g.timerCancel)
 		g.timerCancel = nil
 	}
+	winners := g.getWinners()
+	histID := g.currentHistoryID
 	g.Phase = PhaseEnd
 	g.mu.Unlock()
+	go recordGameEnd(histID, "end", winners)
 	g.broadcastState()
 }
 
@@ -677,8 +748,10 @@ func (g *Game) setError(msg string) {
 		close(g.timerCancel)
 		g.timerCancel = nil
 	}
+	histID := g.currentHistoryID
 	g.Phase = PhaseError
 	g.ErrorMsg = msg
 	g.mu.Unlock()
+	go recordGameEnd(histID, "error", nil)
 	g.broadcastState()
 }

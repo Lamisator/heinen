@@ -23,6 +23,7 @@ func initDB() {
 	db.Exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`)
 
 	initSessionTable()
+	initGameHistoryTables()
 	os.MkdirAll("sounds", 0750)
 	os.MkdirAll("fonts", 0750)
 
@@ -31,6 +32,7 @@ func initDB() {
 		"vol_intro": "0.6", "vol_background": "0.2", "vol_wrong": "0.6", "vol_answer": "0.6",
 		"vol_hurry": "0.5", "vol_timeout": "0.6", "vol_question": "0.5",
 		"vol_allwrong": "0.6", "vol_allcorrect": "0.6",
+		"dedup_similarity_threshold": "0.85",
 	}
 	for k, v := range defaults {
 		if getSetting(k) == "" {

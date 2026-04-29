@@ -1,12 +1,14 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -583,6 +585,222 @@ func handleLogsExport(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+func isValidHistoryID(s string) bool {
+	if len(s) == 0 || len(s) > 36 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func handleGameHistory(w http.ResponseWriter, r *http.Request) {
+	jr(w)
+	u := getSessionUser(r)
+	if u == "" || !isAdmin(u) {
+		w.WriteHeader(403)
+		return
+	}
+	if r.Method != "GET" {
+		w.WriteHeader(405)
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/api/admin/games")
+	path = strings.TrimPrefix(path, "/")
+
+	if path == "" {
+		type gameRow struct {
+			ID          string   `json:"id"`
+			HostUser    string   `json:"hostUser"`
+			LobbyName   string   `json:"lobbyName"`
+			Mode        string   `json:"mode"`
+			Topic       string   `json:"topic"`
+			Difficulty  string   `json:"difficulty"`
+			NumPlayers  int      `json:"numPlayers"`
+			StartedAt   int64    `json:"startedAt"`
+			EndedAt     *int64   `json:"endedAt,omitempty"`
+			EndPhase    string   `json:"endPhase"`
+			Winners     []string `json:"winners"`
+			TotalRounds int      `json:"totalRounds"`
+		}
+		rows, err := db.Query(`
+			SELECT gh.id, gh.host_user, gh.lobby_name, gh.mode, gh.topic, gh.difficulty,
+			       gh.num_players, gh.started_at, gh.ended_at, gh.end_phase, gh.winners,
+			       COUNT(gr.round_number) as total_rounds
+			FROM game_history gh
+			LEFT JOIN game_rounds gr ON gr.game_id = gh.id
+			GROUP BY gh.id
+			ORDER BY gh.started_at DESC
+			LIMIT 100`)
+		if err != nil {
+			w.WriteHeader(500)
+			return
+		}
+		defer rows.Close()
+		result := make([]gameRow, 0)
+		for rows.Next() {
+			var g gameRow
+			var endedAt sql.NullInt64
+			var endPhase, winnersJSON sql.NullString
+			if err := rows.Scan(&g.ID, &g.HostUser, &g.LobbyName, &g.Mode, &g.Topic, &g.Difficulty,
+				&g.NumPlayers, &g.StartedAt, &endedAt, &endPhase, &winnersJSON, &g.TotalRounds); err != nil {
+				continue
+			}
+			if endedAt.Valid {
+				g.EndedAt = &endedAt.Int64
+			}
+			if endPhase.Valid {
+				g.EndPhase = endPhase.String
+			}
+			if winnersJSON.Valid && winnersJSON.String != "" {
+				json.Unmarshal([]byte(winnersJSON.String), &g.Winners)
+			}
+			if g.Winners == nil {
+				g.Winners = []string{}
+			}
+			result = append(result, g)
+		}
+		json.NewEncoder(w).Encode(result)
+		return
+	}
+
+	gameID := path
+	if !isValidHistoryID(gameID) {
+		w.WriteHeader(400)
+		return
+	}
+
+	type playerRoundDetail struct {
+		PlayerID    string `json:"playerId"`
+		PlayerName  string `json:"playerName"`
+		Answer      int    `json:"answer"`
+		Result      string `json:"result"`
+		TeethBefore int    `json:"teethBefore"`
+		TeethAfter  int    `json:"teethAfter"`
+		Eliminated  bool   `json:"eliminated"`
+	}
+	type roundDetail struct {
+		Number        int                 `json:"number"`
+		Question      string              `json:"question"`
+		Options       []string            `json:"options"`
+		CorrectAnswer int                 `json:"correctAnswer"`
+		Difficulty    string              `json:"difficulty"`
+		Players       []playerRoundDetail `json:"players"`
+	}
+	type gameDetail struct {
+		ID           string       `json:"id"`
+		HostUser     string       `json:"hostUser"`
+		LobbyName    string       `json:"lobbyName"`
+		Mode         string       `json:"mode"`
+		Topic        string       `json:"topic"`
+		Difficulty   string       `json:"difficulty"`
+		StartDiff    string       `json:"startDifficulty"`
+		NumTeeth     int          `json:"numTeeth"`
+		TimePerQ     int          `json:"timePerQ"`
+		NumOptions   int          `json:"numOptions"`
+		NumPlayers   int          `json:"numPlayers"`
+		StartedAt    int64        `json:"startedAt"`
+		EndedAt      *int64       `json:"endedAt,omitempty"`
+		EndPhase     string       `json:"endPhase"`
+		Winners      []string     `json:"winners"`
+		Rounds       []roundDetail `json:"rounds"`
+	}
+
+	var gd gameDetail
+	var endedAt sql.NullInt64
+	var endPhase, winnersJSON, startDiff sql.NullString
+	err := db.QueryRow(`SELECT id, host_user, lobby_name, mode, topic, difficulty, start_difficulty,
+		num_teeth, time_per_q, num_options, num_players, started_at, ended_at, end_phase, winners
+		FROM game_history WHERE id = ?`, gameID).Scan(
+		&gd.ID, &gd.HostUser, &gd.LobbyName, &gd.Mode, &gd.Topic, &gd.Difficulty, &startDiff,
+		&gd.NumTeeth, &gd.TimePerQ, &gd.NumOptions, &gd.NumPlayers, &gd.StartedAt,
+		&endedAt, &endPhase, &winnersJSON)
+	if err == sql.ErrNoRows {
+		w.WriteHeader(404)
+		return
+	}
+	if err != nil {
+		w.WriteHeader(500)
+		return
+	}
+	if startDiff.Valid {
+		gd.StartDiff = startDiff.String
+	}
+	if endedAt.Valid {
+		gd.EndedAt = &endedAt.Int64
+	}
+	if endPhase.Valid {
+		gd.EndPhase = endPhase.String
+	}
+	if winnersJSON.Valid && winnersJSON.String != "" {
+		json.Unmarshal([]byte(winnersJSON.String), &gd.Winners)
+	}
+	if gd.Winners == nil {
+		gd.Winners = []string{}
+	}
+
+	roundRows, err := db.Query(`SELECT round_number, question_text, options, correct_answer, difficulty
+		FROM game_rounds WHERE game_id = ? ORDER BY round_number`, gameID)
+	if err != nil {
+		w.WriteHeader(500)
+		return
+	}
+	defer roundRows.Close()
+	roundMap := make(map[int]*roundDetail)
+	roundOrder := []int{}
+	for roundRows.Next() {
+		var rd roundDetail
+		var optJSON string
+		if err := roundRows.Scan(&rd.Number, &rd.Question, &optJSON, &rd.CorrectAnswer, &rd.Difficulty); err != nil {
+			continue
+		}
+		json.Unmarshal([]byte(optJSON), &rd.Options)
+		if rd.Options == nil {
+			rd.Options = []string{}
+		}
+		rd.Players = []playerRoundDetail{}
+		roundMap[rd.Number] = &rd
+		roundOrder = append(roundOrder, rd.Number)
+	}
+
+	playerRows, err := db.Query(`SELECT round_number, player_id, player_name, answer, result, teeth_before, teeth_after, eliminated
+		FROM game_player_rounds WHERE game_id = ? ORDER BY round_number, player_name`, gameID)
+	if err != nil {
+		w.WriteHeader(500)
+		return
+	}
+	defer playerRows.Close()
+	for playerRows.Next() {
+		var rn, ans, tb, ta, elim int
+		var pid, pname, result string
+		if err := playerRows.Scan(&rn, &pid, &pname, &ans, &result, &tb, &ta, &elim); err != nil {
+			continue
+		}
+		rd, ok := roundMap[rn]
+		if !ok {
+			continue
+		}
+		rd.Players = append(rd.Players, playerRoundDetail{
+			PlayerID: pid, PlayerName: pname,
+			Answer: ans, Result: result,
+			TeethBefore: tb, TeethAfter: ta,
+			Eliminated: elim == 1,
+		})
+	}
+
+	gd.Rounds = make([]roundDetail, 0, len(roundOrder))
+	for _, n := range roundOrder {
+		if rd, ok := roundMap[n]; ok {
+			gd.Rounds = append(gd.Rounds, *rd)
+		}
+	}
+	json.NewEncoder(w).Encode(gd)
+}
+
 func handleLobbies(w http.ResponseWriter, r *http.Request) {
 	jr(w)
 	gamesMu.Lock()
@@ -606,4 +824,304 @@ func handleLobbies(w http.ResponseWriter, r *http.Request) {
 		g.mu.Unlock()
 	}
 	json.NewEncoder(w).Encode(lobbies)
+}
+
+func handleAdminQuestions(w http.ResponseWriter, r *http.Request) {
+	jr(w)
+	u := getSessionUser(r)
+	if u == "" || !isAdmin(u) {
+		w.WriteHeader(403)
+		return
+	}
+
+	switch r.Method {
+	case "GET":
+		q := r.URL.Query()
+		if q.Get("view") == "reported" {
+			recs, err := queryReportedQuestions()
+			if err != nil {
+				w.WriteHeader(500)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			if recs == nil {
+				recs = []questionRecord{}
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"questions": recs, "total": len(recs)})
+			return
+		}
+		if q.Get("view") == "duplicates" {
+			thr := 0.85
+			if ts := q.Get("threshold"); ts != "" {
+				if v, err := strconv.ParseFloat(ts, 64); err == nil && v > 0 && v <= 1 {
+					thr = v
+				}
+			}
+			pairs, err := findDuplicatePairs(thr)
+			if err != nil {
+				w.WriteHeader(500)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"pairs": pairs, "threshold": thr})
+			return
+		}
+		if q.Get("view") == "topics" {
+			stats, err := getTopicsWithStats()
+			if err != nil {
+				w.WriteHeader(500)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			if stats == nil {
+				stats = []topicStat{}
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"topics": stats})
+			return
+		}
+		search := q.Get("search")
+		topic := q.Get("topic")
+		difficulty := q.Get("difficulty")
+		aiProvider := q.Get("ai_provider")
+		numOptions, _ := strconv.Atoi(q.Get("num_options"))
+		page := 1
+		if p, err := strconv.Atoi(q.Get("page")); err == nil && p > 0 {
+			page = p
+		}
+		limit := 20
+		offset := (page - 1) * limit
+
+		records, total, err := queryQuestions(search, topic, difficulty, aiProvider, numOptions, limit, offset)
+		if err != nil {
+			w.WriteHeader(500)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		if records == nil {
+			records = []questionRecord{}
+		}
+		total32, byDiff, _ := getQuestionStats()
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"questions":    records,
+			"total":        total,
+			"page":         page,
+			"limit":        limit,
+			"totalAll":     total32,
+			"byDifficulty": byDiff,
+		})
+
+	case "POST":
+		if !verifyCSRFToken(r) {
+			w.WriteHeader(403)
+			json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
+			return
+		}
+		var postReq struct {
+			Text          string   `json:"text"`
+			Options       []string `json:"options"`
+			CorrectAnswer int      `json:"correctAnswer"`
+			NumOptions    int      `json:"numOptions"`
+			Difficulty    string   `json:"difficulty"`
+			Topic         string   `json:"topic"`
+		}
+		json.NewDecoder(r.Body).Decode(&postReq)
+		if strings.TrimSpace(postReq.Text) == "" || len(postReq.Options) < 2 {
+			w.WriteHeader(400)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Frage und mindestens 2 Optionen erforderlich"})
+			return
+		}
+		if postReq.CorrectAnswer < 0 || postReq.CorrectAnswer >= len(postReq.Options) {
+			w.WriteHeader(400)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Ungültige richtige Antwort"})
+			return
+		}
+		nO := postReq.NumOptions
+		if nO == 0 {
+			nO = len(postReq.Options)
+		}
+		if err := insertManualQuestion(postReq.Text, postReq.Options, postReq.CorrectAnswer, nO, postReq.Difficulty, postReq.Topic); err != nil {
+			w.WriteHeader(500)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		logInfo(getIP(r), u, "Q_MANUAL_ADD", fmt.Sprintf("topic=%s diff=%s", postReq.Topic, postReq.Difficulty))
+		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
+	case "PUT":
+		if !verifyCSRFToken(r) {
+			w.WriteHeader(403)
+			json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
+			return
+		}
+		var putReq struct {
+			ID            int64    `json:"id"`
+			Text          string   `json:"text"`
+			Options       []string `json:"options"`
+			CorrectAnswer int      `json:"correctAnswer"`
+			NumOptions    int      `json:"numOptions"`
+			Difficulty    string   `json:"difficulty"`
+			Topic         string   `json:"topic"`
+			AIProvider    string   `json:"aiProvider"`
+			AIModel       string   `json:"aiModel"`
+			MarkPairA  int64 `json:"markPairA"`
+			MarkPairB  int64 `json:"markPairB"`
+			ClearReport bool  `json:"clearReport"`
+		}
+		json.NewDecoder(r.Body).Decode(&putReq)
+		if putReq.ID == 0 && putReq.MarkPairA == 0 {
+			w.WriteHeader(400)
+			json.NewEncoder(w).Encode(map[string]string{"error": "id required"})
+			return
+		}
+		if putReq.MarkPairA != 0 && putReq.MarkPairB != 0 {
+			if err := markPairReviewed(putReq.MarkPairA, putReq.MarkPairB); err != nil {
+				w.WriteHeader(500)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+			return
+		}
+		if putReq.ClearReport {
+			if err := clearQuestionReport(putReq.ID); err != nil {
+				w.WriteHeader(500)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+			return
+		}
+		if err := updateQuestion(putReq.ID, putReq.Text, putReq.Options, putReq.CorrectAnswer, putReq.NumOptions, putReq.Difficulty, putReq.Topic, putReq.AIProvider, putReq.AIModel); err != nil {
+			w.WriteHeader(500)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
+	case "DELETE":
+		if !verifyCSRFToken(r) {
+			w.WriteHeader(403)
+			json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
+			return
+		}
+		var req struct {
+			ID         *int64 `json:"id"`
+			Topic      string `json:"topic"`
+			Difficulty string `json:"difficulty"`
+			AIProvider string `json:"aiProvider"`
+			DeleteAll  bool   `json:"deleteAll"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+
+		if req.ID != nil {
+			if err := deleteQuestionDB(*req.ID); err != nil {
+				w.WriteHeader(500)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+			return
+		}
+		if req.DeleteAll {
+			n, err := deleteAllQuestions(struct{ topic, difficulty, aiProvider string }{req.Topic, req.Difficulty, req.AIProvider})
+			if err != nil {
+				w.WriteHeader(500)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "deleted": n})
+			return
+		}
+		w.WriteHeader(400)
+		json.NewEncoder(w).Encode(map[string]string{"error": "nothing to delete"})
+
+	default:
+		w.WriteHeader(405)
+	}
+}
+
+func handleAdminGenerateQuestions(w http.ResponseWriter, r *http.Request) {
+	jr(w)
+	u := getSessionUser(r)
+	if u == "" || !isAdmin(u) {
+		w.WriteHeader(403)
+		return
+	}
+	if r.Method != "POST" {
+		w.WriteHeader(405)
+		return
+	}
+	if !verifyCSRFToken(r) {
+		logWarn(getIP(r), u, "CSRF_FAIL", "generate-questions")
+		w.WriteHeader(403)
+		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
+		return
+	}
+	// AI generation can take up to 2 minutes – extend write deadline
+	rc := http.NewResponseController(w)
+	rc.SetWriteDeadline(time.Now().Add(150 * time.Second))
+
+	var req struct {
+		Topic      string `json:"topic"`
+		Difficulty string `json:"difficulty"`
+		Count      int    `json:"count"`
+		NumOptions int    `json:"numOptions"`
+		WebSearch  bool   `json:"webSearch"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	if strings.TrimSpace(req.Topic) == "" {
+		req.Topic = "Allgemeinwissen"
+	}
+	if req.Difficulty == "" {
+		req.Difficulty = "mittel"
+	}
+	if req.Count <= 0 || req.Count > 50 {
+		req.Count = 10
+	}
+	if req.NumOptions < 2 || req.NumOptions > 4 {
+		req.NumOptions = 4
+	}
+	prev, _ := recentQTextsForTopicDiff(req.Topic, req.Difficulty, 40)
+	res, err := generateQuestions(req.Topic, req.Difficulty, req.Count, req.NumOptions, prev, req.WebSearch)
+	if err != nil {
+		w.WriteHeader(500)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	logInfo(getIP(r), u, "QE_GENERATE", fmt.Sprintf("topic=%s diff=%s count=%d filtered=%d web_search=%v", req.Topic, req.Difficulty, len(res.Questions), res.FilteredCount, req.WebSearch))
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "count": len(res.Questions), "filtered": res.FilteredCount})
+}
+
+func handleReportQuestion(w http.ResponseWriter, r *http.Request) {
+	jr(w)
+	if r.Method != "POST" {
+		w.WriteHeader(405)
+		return
+	}
+	if !verifyCSRFToken(r) {
+		logWarn(getIP(r), "", "CSRF_FAIL", "report-question")
+		w.WriteHeader(403)
+		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
+		return
+	}
+	var req struct {
+		Text string `json:"text"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	if req.Text == "" {
+		w.WriteHeader(400)
+		json.NewEncoder(w).Encode(map[string]string{"error": "text required"})
+		return
+	}
+	if err := reportQuestion(req.Text); err != nil {
+		w.WriteHeader(500)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	t := req.Text
+	if len(t) > 80 {
+		t = t[:80]
+	}
+	logInfo(getIP(r), "", "QUESTION_REPORTED", "text="+t)
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
