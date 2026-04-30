@@ -5,17 +5,18 @@ import (
 	"time"
 )
 
-// RateLimiter tracks requests per IP and per account with exponential backoff
+// RateLimiter tracks requests per IP and per account with exponential backoff.
+// Login and lobby-password attempts use separate maps to prevent cross-interference.
 type RateLimiter struct {
-	ipLimits      map[string]*ipLimit
-	accountLimits map[string]*accountLimit
-	mu            sync.Mutex
+	ipLoginLimits  map[string]*ipLimit
+	ipLobbyLimits  map[string]*ipLimit
+	accountLimits  map[string]*accountLimit
+	mu             sync.Mutex
 }
 
 type ipLimit struct {
-	count   int
-	lastAt  time.Time
-	backoff int
+	count  int
+	lastAt time.Time
 }
 
 type accountLimit struct {
@@ -25,25 +26,26 @@ type accountLimit struct {
 }
 
 var limiter = &RateLimiter{
-	ipLimits:      make(map[string]*ipLimit),
+	ipLoginLimits: make(map[string]*ipLimit),
+	ipLobbyLimits: make(map[string]*ipLimit),
 	accountLimits: make(map[string]*accountLimit),
 }
 
-// CheckLoginRate returns true if request should be allowed, false if rate limited
+// CheckLoginRate returns true if the login attempt should be allowed.
 func (rl *RateLimiter) CheckLoginRate(ip string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	now := time.Now()
-	limit, ok := rl.ipLimits[ip]
+	limit, ok := rl.ipLoginLimits[ip]
 	if !ok {
-		rl.ipLimits[ip] = &ipLimit{count: 1, lastAt: now, backoff: 0}
+		rl.ipLoginLimits[ip] = &ipLimit{count: 1, lastAt: now}
 		return true
 	}
 	if now.Sub(limit.lastAt) > 15*time.Minute {
-		rl.ipLimits[ip] = &ipLimit{count: 1, lastAt: now, backoff: 0}
+		rl.ipLoginLimits[ip] = &ipLimit{count: 1, lastAt: now}
 		return true
 	}
-	if limit.count > 5 {
+	if limit.count >= 5 {
 		return false
 	}
 	limit.count++
@@ -51,7 +53,7 @@ func (rl *RateLimiter) CheckLoginRate(ip string) bool {
 	return true
 }
 
-// CheckAccountLockout returns true if account is currently locked (call before auth attempt)
+// CheckAccountLockout returns true if the account is currently locked.
 func (rl *RateLimiter) CheckAccountLockout(account string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -71,7 +73,7 @@ func (rl *RateLimiter) CheckAccountLockout(account string) bool {
 	return false
 }
 
-// RecordAuthFailure increments failure counter for account (call after failed auth)
+// RecordAuthFailure increments the failure counter for an account.
 func (rl *RateLimiter) RecordAuthFailure(account string) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -92,31 +94,59 @@ func (rl *RateLimiter) RecordAuthFailure(account string) {
 	}
 }
 
-// RecordSuccess clears rate limit on successful login
+// RecordSuccess clears rate-limit state on successful login.
 func (rl *RateLimiter) RecordSuccess(ip, account string) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	delete(rl.ipLimits, ip)
+	delete(rl.ipLoginLimits, ip)
 	delete(rl.accountLimits, account)
 }
 
-// CheckLobbyPasswordRate returns true if request should be allowed
+// CheckLobbyPasswordRate returns true if the lobby-password attempt should be allowed.
 func (rl *RateLimiter) CheckLobbyPasswordRate(ip string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	now := time.Now()
-	limit, ok := rl.ipLimits[ip]
+	limit, ok := rl.ipLobbyLimits[ip]
 	if !ok {
-		rl.ipLimits[ip] = &ipLimit{count: 1, lastAt: now, backoff: 0}
+		rl.ipLobbyLimits[ip] = &ipLimit{count: 1, lastAt: now}
 		return true
 	}
 	if now.Sub(limit.lastAt) > 10*time.Minute {
-		rl.ipLimits[ip] = &ipLimit{count: 1, lastAt: now, backoff: 0}
+		rl.ipLobbyLimits[ip] = &ipLimit{count: 1, lastAt: now}
 		return true
 	}
-	if limit.count > 10 {
+	if limit.count >= 10 {
 		return false
 	}
 	limit.count++
+	limit.lastAt = now
 	return true
+}
+
+// CleanExpired removes stale entries older than the given threshold to bound memory usage.
+func (rl *RateLimiter) CleanExpired() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	threshold := 30 * time.Minute
+	now := time.Now()
+	for ip, l := range rl.ipLoginLimits {
+		if now.Sub(l.lastAt) > threshold {
+			delete(rl.ipLoginLimits, ip)
+		}
+	}
+	for ip, l := range rl.ipLobbyLimits {
+		if now.Sub(l.lastAt) > threshold {
+			delete(rl.ipLobbyLimits, ip)
+		}
+	}
+	for acct, a := range rl.accountLimits {
+		cutoff := a.lastAt
+		if !a.lockedAt.IsZero() && a.lockedAt.After(cutoff) {
+			cutoff = a.lockedAt
+		}
+		if now.Sub(cutoff) > threshold {
+			delete(rl.accountLimits, acct)
+		}
+	}
 }

@@ -2,9 +2,9 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
-	"strings"
 )
 
 const CSRFCookie = "heinen_csrf"
@@ -42,5 +42,5 @@ func verifyCSRFToken(r *http.Request) bool {
 	if headerToken == "" {
 		return false
 	}
-	return strings.EqualFold(cookie.Value, headerToken)
+	return subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(headerToken)) == 1
 }

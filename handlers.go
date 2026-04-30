@@ -34,6 +34,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "Zu viele Versuche. Bitte später versuchen."})
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var req struct{ Username, Password string }
 	json.NewDecoder(r.Body).Decode(&req)
 	if limiter.CheckAccountLockout(req.Username) {
@@ -66,6 +67,16 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {
 	jr(w)
+	if r.Method != "POST" {
+		w.WriteHeader(405)
+		return
+	}
+	if !verifyCSRFToken(r) {
+		logWarn(getIP(r), "", "CSRF_FAIL", "logout")
+		w.WriteHeader(403)
+		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
+		return
+	}
 	if c, err := r.Cookie(SessionCookie); err == nil {
 		deleteSession(c.Value)
 	}
@@ -109,6 +120,7 @@ func handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var req struct{ OldPassword, NewPassword string }
 	json.NewDecoder(r.Body).Decode(&req)
 	if !authenticateUser(u, req.OldPassword) {
@@ -163,6 +175,7 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewEncoder(w).Encode(users)
 	case "POST":
+		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 		var req struct {
 			Username, Password string
 			IsAdmin            bool
@@ -185,6 +198,7 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 		logInfo(ip, u, "USER_CREATE", fmt.Sprintf("username=%s admin=%v", req.Username, req.IsAdmin))
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	case "DELETE":
+		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 		var req struct{ ID int }
 		json.NewDecoder(r.Body).Decode(&req)
 		var tu string
@@ -204,6 +218,7 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 		logInfo(ip, u, "USER_DELETE", "deleted="+tu)
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	case "PUT":
+		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 		var req struct {
 			ID       int
 			Password string
@@ -232,6 +247,11 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 				av = 1
 			}
 			db.Exec("UPDATE users SET is_admin = ? WHERE id = ?", av, req.ID)
+			var roleTarget string
+			db.QueryRow("SELECT username FROM users WHERE id = ?", req.ID).Scan(&roleTarget)
+			if roleTarget != "" {
+				deleteUserSessions(roleTarget)
+			}
 			logInfo(ip, u, "USER_ROLE", fmt.Sprintf("id=%d admin=%v", req.ID, *req.IsAdmin))
 		}
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
@@ -255,11 +275,11 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 	case "GET":
 		oK := os.Getenv("OPENAI_API_KEY")
 		if oK == "" {
-			oK = getSetting("openai_api_key")
+			oK = getEncryptedSetting("openai_api_key")
 		}
 		aK := os.Getenv("ANTHROPIC_API_KEY")
 		if aK == "" {
-			aK = getSetting("anthropic_api_key")
+			aK = getEncryptedSetting("anthropic_api_key")
 		}
 		oM := ""
 		if oK != "" {
@@ -287,6 +307,7 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 			"vol_allwrong": getSetting("vol_allwrong"), "vol_allcorrect": getSetting("vol_allcorrect"),
 		})
 	case "POST":
+		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 		var req struct {
 			Provider, Model, OpenaiKey, AnthropicKey, IntroDelay                                    string
 			VolIntro, VolBackground, VolWrong, VolAnswer, VolHurry, VolTimeout, VolQuestion, VolAllwrong, VolAllcorrect string
@@ -299,10 +320,10 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 			setSetting("ai_model", req.Model)
 		}
 		if req.OpenaiKey != "" {
-			setSetting("openai_api_key", req.OpenaiKey)
+			setEncryptedSetting("openai_api_key", req.OpenaiKey)
 		}
 		if req.AnthropicKey != "" {
-			setSetting("anthropic_api_key", req.AnthropicKey)
+			setEncryptedSetting("anthropic_api_key", req.AnthropicKey)
 		}
 		if req.IntroDelay != "" {
 			setSetting("intro_delay", req.IntroDelay)
@@ -346,18 +367,19 @@ func handleTestAI(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(403)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var req struct{ Provider, Key, Model string }
 	json.NewDecoder(r.Body).Decode(&req)
 	if req.Key == "" {
 		if req.Provider == "anthropic" {
 			req.Key = os.Getenv("ANTHROPIC_API_KEY")
 			if req.Key == "" {
-				req.Key = getSetting("anthropic_api_key")
+				req.Key = getEncryptedSetting("anthropic_api_key")
 			}
 		} else {
 			req.Key = os.Getenv("OPENAI_API_KEY")
 			if req.Key == "" {
-				req.Key = getSetting("openai_api_key")
+				req.Key = getEncryptedSetting("openai_api_key")
 			}
 		}
 	}
@@ -494,26 +516,31 @@ func handleSoundFile(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	ok := false
-	for _, p := range soundTypes {
-		if strings.HasPrefix(name, p) {
-			ok = true
+	// Exact-match whitelist: only allow <soundType>.mp3 or <soundType>.wav
+	var fp string
+	for _, st := range soundTypes {
+		for _, ext := range []string{".mp3", ".wav"} {
+			if name == st+ext {
+				fp = filepath.Join("sounds", name)
+				break
+			}
+		}
+		if fp != "" {
 			break
 		}
 	}
-	if !ok {
+	if fp == "" {
 		http.NotFound(w, r)
 		return
 	}
-	fp := filepath.Join("sounds", name)
 	if _, err := os.Stat(fp); err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	ext := strings.ToLower(filepath.Ext(name))
+	ext := filepath.Ext(name)
 	if ext == ".mp3" {
 		w.Header().Set("Content-Type", "audio/mpeg")
-	} else if ext == ".wav" {
+	} else {
 		w.Header().Set("Content-Type", "audio/wav")
 	}
 	w.Header().Set("Cache-Control", "public, max-age=3600")
@@ -916,6 +943,7 @@ func handleAdminQuestions(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 		var postReq struct {
 			Text          string   `json:"text"`
 			Options       []string `json:"options"`
@@ -953,6 +981,7 @@ func handleAdminQuestions(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 		var putReq struct {
 			ID            int64    `json:"id"`
 			Text          string   `json:"text"`
@@ -1004,6 +1033,7 @@ func handleAdminQuestions(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 		var req struct {
 			ID         *int64 `json:"id"`
 			Topic      string `json:"topic"`
@@ -1104,6 +1134,7 @@ func handleReportQuestion(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var req struct {
 		Text string `json:"text"`
 	}

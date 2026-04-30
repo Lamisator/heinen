@@ -72,9 +72,9 @@ func generateQuestions(topic, diff string, count, nO int, prev []string, webSear
 	model := getSetting("ai_model")
 	key := ""
 	if prov == "anthropic" {
-		key = getSetting("anthropic_api_key")
+		key = getEncryptedSetting("anthropic_api_key")
 	} else {
-		key = getSetting("openai_api_key")
+		key = getEncryptedSetting("openai_api_key")
 		prov = "openai"
 	}
 	if key == "" {

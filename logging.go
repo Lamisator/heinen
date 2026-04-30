@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // LogLevel represents log severity
@@ -45,11 +47,25 @@ func initLog() {
 	}
 }
 
+// sanitizeLogField strips newlines and control characters to prevent log injection.
+func sanitizeLogField(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
 // logEvent writes a structured log entry
 func logEvent(level LogLevel, ip, user, action, details string) {
 	logMu.Lock()
 	defer logMu.Unlock()
 	ts := time.Now().Format("2006-01-02 15:04:05")
+	ip = sanitizeLogField(ip)
+	user = sanitizeLogField(user)
+	action = sanitizeLogField(action)
+	details = sanitizeLogField(details)
 	if user == "" {
 		user = "-"
 	}
@@ -74,14 +90,17 @@ func writeLog(ip, user, action, details string) { logInfo(ip, user, action, deta
 
 // getIP extracts the client IP from a request, honoring proxies only if from trusted source
 func getIP(r *http.Request) string {
-	remoteIP := strings.Split(r.RemoteAddr, ":")[0]
+	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteIP = r.RemoteAddr
+	}
 	isTrustedProxy := remoteIP == "127.0.0.1" || remoteIP == "::1" || remoteIP == "localhost"
 	if isTrustedProxy {
 		if f := r.Header.Get("X-Forwarded-For"); f != "" {
-			return strings.Split(f, ",")[0]
+			return strings.TrimSpace(strings.Split(f, ",")[0])
 		}
 		if f := r.Header.Get("X-Real-IP"); f != "" {
-			return f
+			return strings.TrimSpace(f)
 		}
 	}
 	return remoteIP

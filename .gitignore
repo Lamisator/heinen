@@ -30,6 +30,10 @@ go.work.sum
 # Deploy script (contains server credentials)
 deploy.sh
 
+# Runtime data – never commit DB or logs
+heinen.db
+heinen.log
+
 # Editor/IDE
 # .idea/
 # .vscode/

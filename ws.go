@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -16,9 +17,12 @@ import (
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
-		return true // Non-browser clients don't send Origin
+		return false // browsers always send Origin; reject empty to prevent CSWSH
 	}
-	remoteIP := strings.Split(r.RemoteAddr, ":")[0]
+	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteIP = r.RemoteAddr
+	}
 	isTrustedProxy := remoteIP == "127.0.0.1" || remoteIP == "::1"
 	host := r.Host
 	if isTrustedProxy {

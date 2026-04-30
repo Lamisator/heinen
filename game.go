@@ -651,6 +651,27 @@ func playerJSON(p *Player) map[string]interface{} {
 	}
 }
 
+// clientGameSettings is a copy of GameSettings safe to broadcast to all clients –
+// LobbyPassword is replaced by a boolean so joining clients know a password is set
+// without exposing the value to already-connected players.
+type clientGameSettings struct {
+	Topic             string    `json:"topic"`
+	Difficulty        string    `json:"difficulty"`
+	StartDifficulty   string    `json:"startDifficulty"`
+	NumQuestions      int       `json:"numQuestions"`
+	TimePerQ          int       `json:"timePerQuestion"`
+	NumOptions        int       `json:"numOptions"`
+	NumTeeth          int       `json:"numTeeth"`
+	Mode              GameMode  `json:"mode"`
+	ShowTutorial      bool      `json:"showTutorial"`
+	LobbyName         string    `json:"lobbyName"`
+	LobbyMode         LobbyMode `json:"lobbyMode"`
+	HasPassword       bool      `json:"hasPassword"`
+	WebSearch         bool      `json:"webSearch"`
+	PlayIntro         bool      `json:"playIntro"`
+	AllowAnswerChange bool      `json:"allowAnswerChange"`
+}
+
 func (g *Game) buildState() map[string]interface{} {
 	ps := make([]map[string]interface{}, 0)
 	for _, id := range g.PlayerOrder {
@@ -662,8 +683,18 @@ func (g *Game) buildState() map[string]interface{} {
 	if g.isEndless() {
 		tQ = len(g.Questions)
 	}
+	cs := clientGameSettings{
+		Topic: g.Settings.Topic, Difficulty: g.Settings.Difficulty,
+		StartDifficulty: g.Settings.StartDifficulty, NumQuestions: g.Settings.NumQuestions,
+		TimePerQ: g.Settings.TimePerQ, NumOptions: g.Settings.NumOptions,
+		NumTeeth: g.Settings.NumTeeth, Mode: g.Settings.Mode,
+		ShowTutorial: g.Settings.ShowTutorial, LobbyName: g.Settings.LobbyName,
+		LobbyMode: g.Settings.LobbyMode, HasPassword: g.Settings.LobbyPassword != "",
+		WebSearch: g.Settings.WebSearch, PlayIntro: g.Settings.PlayIntro,
+		AllowAnswerChange: g.Settings.AllowAnswerChange,
+	}
 	st := map[string]interface{}{
-		"phase": g.Phase, "players": ps, "settings": g.Settings,
+		"phase": g.Phase, "players": ps, "settings": cs,
 		"hostId": g.HostID, "gameId": g.ID, "inviteCode": g.InviteCode,
 		"currentQuestion": g.CurrentQ, "totalQuestions": tQ, "timeLeft": 0, "someoneLost": g.SomeoneLost, "allWrong": g.AllWrong, "allCorrect": g.AllCorrect,
 		"delegatedTo": g.DelegatedTo,
