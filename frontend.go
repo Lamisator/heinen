@@ -48,10 +48,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .og{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px}.ob{padding:15px 16px;background:var(--surface);border:2px solid var(--border);border-radius:12px;color:var(--text);font-family:'Outfit',sans-serif;font-size:.9rem;font-weight:500;cursor:pointer;transition:all .2s;text-align:left}.ob:hover:not(.sel):not(.dis){border-color:var(--accent);background:rgba(255,51,102,.05);transform:translateY(-1px)}.ob.sel{border-color:var(--gold)!important;background:rgba(255,215,0,.12)!important;box-shadow:0 0 14px rgba(255,215,0,.35)}.ob.sel .ol{color:var(--gold)}.ob.correct{border-color:var(--correct)!important;background:rgba(0,230,138,.12)!important;box-shadow:0 0 14px rgba(0,230,138,.35)!important}.ob.wrong{border-color:var(--wrong)!important;background:rgba(255,51,102,.18)!important;box-shadow:0 0 22px rgba(255,51,102,.7),0 0 40px rgba(255,51,102,.3)!important;animation:wrong-pulse 1.2s ease-in-out infinite}@keyframes wrong-pulse{0%,100%{box-shadow:0 0 22px rgba(255,51,102,.7),0 0 40px rgba(255,51,102,.3)}50%{box-shadow:0 0 30px rgba(255,51,102,.9),0 0 55px rgba(255,51,102,.5)}}.ob.dis{cursor:default;opacity:.85}.ob.spectator{cursor:default;opacity:.4;pointer-events:none}.ol{font-family:'Space Mono',monospace;font-weight:700;margin-right:8px;color:var(--text2)}.ob.correct .ol{color:var(--correct)}.ob.wrong .ol{color:var(--wrong)}
 .ri{text-align:center;margin:16px 0;font-size:.9rem;color:var(--text2)}.end-container{text-align:center;max-width:600px;margin:30px auto}.winner-display{font-size:1.8rem;font-weight:800;margin:14px 0;background:linear-gradient(135deg,var(--gold),#ffaa00);-webkit-background-clip:text;-webkit-text-fill-color:transparent}.no-winner{font-size:1.3rem;color:var(--text2);margin:14px 0}.end-sub{font-size:.9rem;color:var(--text2);margin-bottom:20px}
 .loading-container{text-align:center;padding:50px 20px}
-.tooth-stage{width:220px;height:230px;margin:0 auto 22px;perspective:780px;perspective-origin:50% 42%;--r:96px}
-.tooth-iso{position:relative;width:100%;height:100%;transform-style:preserve-3d;transform:rotateX(-16deg)}
-.tooth-rot{position:absolute;inset:0;transform-style:preserve-3d;animation:tooth-spin 4s linear infinite;will-change:transform}
+.tooth-stage{width:220px;height:230px;margin:0 auto 22px;perspective:780px;perspective-origin:50% 42%;transform-style:preserve-3d;position:relative;--r:96px}
+.tooth-iso{position:absolute;inset:0;transform-style:preserve-3d;animation:tooth-spin 4s linear infinite;will-change:transform}
 @keyframes tooth-spin{from{transform:rotateY(0deg)}to{transform:rotateY(-360deg)}}
+.tooth-rot{position:absolute;inset:0;transform-style:preserve-3d;transform:rotateX(-18deg)}
 .tooth-face{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
 .tooth-face svg{width:130px;height:170px;display:block;overflow:visible;filter:drop-shadow(0 8px 14px rgba(0,0,0,.55)) drop-shadow(0 0 3px rgba(255,215,0,.25))}
 .orbit-rot{position:absolute;inset:0;transform-style:preserve-3d;animation:orbit-spin 3s linear infinite;will-change:transform;pointer-events:none}
@@ -398,7 +398,7 @@ function buildToothSpinner(){
   // Trail dots: negative --a angles (wrapper rotates +Y, so the trail behind the head sits at negative wrapper-local angles)
   const cfg=[[8,.85],[16,.7],[24,.58],[32,.48],[40,.4],[50,.32],[60,.25],[72,.18],[86,.12],[102,.07],[120,.04]];
   cfg.forEach(c=>{dots+='<div class="orbit-dot" style="--a:-'+c[0]+'deg;--o:'+c[1]+'"></div>'});
-  return '<div class="tooth-stage"><div class="tooth-iso"><div class="tooth-rot">'+tooth+'</div><div class="orbit-rot">'+dots+'</div></div></div>'
+  return '<div class="tooth-stage"><div class="tooth-iso"><div class="tooth-rot">'+tooth+'</div></div><div class="orbit-rot">'+dots+'</div></div>'
 }
 function mountToothSpinners(){const html=buildToothSpinner();document.querySelectorAll('.tooth-mount').forEach(el=>{if(!el.firstChild)el.innerHTML=html})}
 function getCookie(name){const m=document.cookie.match('(^|;)\\s*'+name+'\\s*=\\s*([^;]+)');return m?m[2]:''}
