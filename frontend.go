@@ -47,7 +47,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .qc{max-width:680px;margin:16px auto;text-align:center}.qh{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding:0 8px}.qn{font-size:.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:2px}.timer{font-family:'Space Mono',monospace;font-size:1.5rem;font-weight:700;color:var(--text);transition:color .3s}.timer.urgent{color:var(--wrong);animation:tp .5s ease-in-out infinite}@keyframes tp{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}.qt{font-size:1.35rem;font-weight:600;margin-bottom:24px;line-height:1.4;padding:0 8px}
 .og{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px}.ob{padding:15px 16px;background:var(--surface);border:2px solid var(--border);border-radius:12px;color:var(--text);font-family:'Outfit',sans-serif;font-size:.9rem;font-weight:500;cursor:pointer;transition:all .2s;text-align:left}.ob:hover:not(.sel):not(.dis){border-color:var(--accent);background:rgba(255,51,102,.05);transform:translateY(-1px)}.ob.sel{border-color:var(--gold)!important;background:rgba(255,215,0,.12)!important;box-shadow:0 0 14px rgba(255,215,0,.35)}.ob.sel .ol{color:var(--gold)}.ob.correct{border-color:var(--correct)!important;background:rgba(0,230,138,.12)!important;box-shadow:0 0 14px rgba(0,230,138,.35)!important}.ob.wrong{border-color:var(--wrong)!important;background:rgba(255,51,102,.18)!important;box-shadow:0 0 22px rgba(255,51,102,.7),0 0 40px rgba(255,51,102,.3)!important;animation:wrong-pulse 1.2s ease-in-out infinite}@keyframes wrong-pulse{0%,100%{box-shadow:0 0 22px rgba(255,51,102,.7),0 0 40px rgba(255,51,102,.3)}50%{box-shadow:0 0 30px rgba(255,51,102,.9),0 0 55px rgba(255,51,102,.5)}}.ob.dis{cursor:default;opacity:.85}.ob.spectator{cursor:default;opacity:.4;pointer-events:none}.ol{font-family:'Space Mono',monospace;font-weight:700;margin-right:8px;color:var(--text2)}.ob.correct .ol{color:var(--correct)}.ob.wrong .ol{color:var(--wrong)}
 .ri{text-align:center;margin:16px 0;font-size:.9rem;color:var(--text2)}.end-container{text-align:center;max-width:600px;margin:30px auto}.winner-display{font-size:1.8rem;font-weight:800;margin:14px 0;background:linear-gradient(135deg,var(--gold),#ffaa00);-webkit-background-clip:text;-webkit-text-fill-color:transparent}.no-winner{font-size:1.3rem;color:var(--text2);margin:14px 0}.end-sub{font-size:.9rem;color:var(--text2);margin-bottom:20px}
-.loading-container{text-align:center;padding:50px 20px}.loading-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}@keyframes spin{to{transform:rotate(360deg)}}.loading-text{color:var(--text2);font-size:.85rem}
+.loading-container{text-align:center;padding:50px 20px}
+.tooth-stage{width:200px;height:200px;margin:0 auto 22px;perspective:680px;perspective-origin:50% 50%}
+.tooth-iso{position:relative;width:100%;height:100%;transform-style:preserve-3d;transform:rotateX(-22deg) rotateZ(-12deg)}
+.tooth-rot{position:absolute;inset:0;transform-style:preserve-3d;animation:tooth-y-spin 4s linear infinite;will-change:transform}
+@keyframes tooth-y-spin{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}
+.tooth-slice{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:translateZ(var(--z,0))}
+.tooth-slice svg{width:108px;height:140px;display:block;overflow:visible;opacity:.82;filter:drop-shadow(0 0 2px rgba(255,215,0,.15))}
+.orbit-rot{position:absolute;inset:0;animation:orbit-z-spin 3s linear infinite reverse;transform-origin:50% 50%;will-change:transform;pointer-events:none}
+@keyframes orbit-z-spin{from{transform:rotateZ(0deg)}to{transform:rotateZ(360deg)}}
+.orbit-dot{position:absolute;left:50%;top:50%;width:7px;height:7px;margin-left:-3.5px;margin-top:-3.5px;background:#fff;border-radius:50%;transform:rotate(var(--a,0deg)) translateX(86px);opacity:var(--o,1);box-shadow:0 0 7px rgba(255,255,255,.55)}
+.orbit-dot.head{width:11px;height:11px;margin-left:-5.5px;margin-top:-5.5px;box-shadow:0 0 14px #fff,0 0 26px rgba(255,255,255,.6)}
+.loading-text{color:var(--text2);font-size:.85rem;letter-spacing:.5px}
+.tooth-spinner-mini{display:block;width:130px;height:130px;margin:0 auto}
+.tooth-spinner-mini .tooth-stage{width:130px;height:130px;margin:0;perspective:520px}
+.tooth-spinner-mini .tooth-slice svg{width:72px;height:94px}
+.tooth-spinner-mini .orbit-dot{transform:rotate(var(--a,0deg)) translateX(56px);width:6px;height:6px;margin-left:-3px;margin-top:-3px}
+.tooth-spinner-mini .orbit-dot.head{width:9px;height:9px;margin-left:-4.5px;margin-top:-4.5px}
 .sv{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:18px}.sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}.sv-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}.sv-label{font-size:.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px}.sv-value{font-size:.85rem;color:var(--text);font-weight:600}
 .mute-btn{z-index:90;background:var(--surface);border:1px solid var(--border);border-radius:50%;width:44px;height:44px;display:none;align-items:center;justify-content:center;cursor:pointer;font-size:1.2rem;transition:all .2s;color:var(--text)}.mute-btn:hover{border-color:var(--accent)}.mute-btn.muted{color:var(--text2)}
 .host-controls{text-align:center;margin-top:16px}.tutorial-content{max-width:700px;margin:20px auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:30px;line-height:1.7}.tutorial-content h1{font-size:1.5rem;margin-bottom:16px;color:var(--gold)}.tutorial-content h2{font-size:1.1rem;margin:20px 0 10px;color:var(--accent)}.tutorial-content h3{font-size:.95rem;margin:16px 0 8px;color:var(--text)}.tutorial-content p{margin-bottom:12px;color:var(--text2)}.tutorial-content ul,.tutorial-content li{color:var(--text2);margin-left:20px;margin-bottom:6px}.tutorial-content strong{color:var(--text)}
@@ -93,13 +109,25 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div class="ig"><label>Benutzername</label><input type="text" id="login-user" autocomplete="username"/></div>
 <div class="ig"><label>Passwort</label><input type="password" id="login-pass" autocomplete="current-password"/></div>
 <button class="btn btn-p" onclick="doLogin()">Anmelden</button>
+<button class="btn btn-s" id="passkey-login-btn" onclick="doPasskeyLogin()" style="margin-top:6px">🔑 Mit Passkey anmelden</button>
 <button class="btn btn-s" onclick="goHome()" style="margin-top:10px">Zurück</button></div></div>
 
 <div id="screen-dashboard" class="screen"><div class="dc"><div style="font-size:1rem;color:var(--text2);margin-bottom:24px" id="welcome-text"></div>
 <div class="da"><button class="btn btn-p" onclick="showScreen('create')">Neues Spiel erstellen</button>
 <button class="btn btn-s" id="btn-admin" onclick="loadAdmin();showScreen('admin')" style="display:none">Admin Control Panel</button>
 <button class="btn btn-s" onclick="showScreen('pw')">Passwort ändern</button>
+<button class="btn btn-s" onclick="loadPasskeys();showScreen('passkeys')">🔑 Passkeys verwalten</button>
 <button class="btn btn-s" onclick="goHome()">Zurück zur Startseite</button></div></div></div>
+
+<div id="screen-passkeys" class="screen"><div class="cc">
+<div class="sp"><div class="spt">Passkeys</div>
+<div style="font-size:.82rem;color:var(--text2);margin-bottom:14px">Passkeys erlauben passwortlosen Login per Fingerabdruck, Gesichtserkennung oder Sicherheitsschlüssel.</div>
+<div id="passkeys-list" style="margin-bottom:14px"></div>
+<div class="ig"><label>Name des neuen Passkeys</label><input type="text" id="passkey-name" placeholder="z.B. MacBook, iPhone…" maxlength="50"/></div>
+<button class="btn btn-p" onclick="doRegisterPasskey()">+ Passkey registrieren</button>
+</div>
+<button class="btn btn-s" onclick="showScreen('dashboard')" style="margin-top:10px">Zurück</button>
+</div></div>
 
 <div id="screen-pw" class="screen"><div class="login-container"><div class="login-title">Passwort ändern</div>
 <div class="ig"><label>Altes Passwort</label><input type="password" id="pw-old"/></div>
@@ -186,8 +214,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div class="pg" id="lobby-players"></div>
 <div id="start-btn-container" style="display:none;text-align:center"><button class="btn btn-p" onclick="startGame()" style="max-width:280px">Spiel starten</button></div></div></div>
 
-<div id="screen-loading" class="screen"><div class="loading-container"><div class="loading-spinner"></div><div class="loading-text">Fragen werden generiert...</div></div></div>
-<div id="screen-refill" class="screen"><div class="loading-container"><div class="loading-spinner"></div><div class="loading-text">Neue Fragen werden nachgeladen...</div></div></div>
+<div id="screen-loading" class="screen"><div class="loading-container"><div class="tooth-mount"></div><div class="loading-text">Fragen werden generiert...</div></div></div>
+<div id="screen-refill" class="screen"><div class="loading-container"><div class="tooth-mount"></div><div class="loading-text">Neue Fragen werden nachgeladen...</div></div></div>
 <div id="screen-tutorial" class="screen"><div class="tutorial-content" id="tutorial-content"></div><div style="text-align:center;margin-top:20px" id="tutorial-actions"></div></div>
 <div id="screen-intro" class="screen"><div class="intro-overlay"><div class="intro-title">HEINEN</div><div class="intro-slogan">Das einzige Spiel mit Spaß-Garantie!<br>Kein Spaß? Geld zurück!</div></div></div>
 <div id="screen-game" class="screen">
@@ -290,7 +318,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 </div>
 </div>
 <div id="qe-gen-loading" style="display:none;text-align:center;padding:12px 0 4px">
-<div class="loading-spinner" style="margin:0 auto 16px"></div>
+<div class="tooth-mount tooth-spinner-mini" style="margin:0 auto 8px"></div>
 <div style="background:var(--bg);border-radius:6px;height:5px;overflow:hidden;margin:0 0 12px;width:100%"><div id="qe-gen-bar" style="height:100%;background:linear-gradient(90deg,var(--accent),var(--gold));border-radius:6px;width:5%;transition:width 2.2s ease"></div></div>
 <div id="qe-gen-progress" class="loading-text"></div>
 </div>
@@ -328,7 +356,20 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <input type="range" id="bg-vol-slider" min="0" max="1" step="0.05" value="0.2" style="width:80px;cursor:pointer" oninput="adjustBgVol(this.value)"/>
 </div>
 <div class="toast" id="toast"></div>
+<svg width="0" height="0" style="position:absolute;width:0;height:0" aria-hidden="true" focusable="false">
+<defs>
+<linearGradient id="tooth-grad" x1="0" y1="-65" x2="0" y2="65" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#fbf6e7"/>
+<stop offset=".55" stop-color="#efe7ce"/>
+<stop offset="1" stop-color="#bdb190"/>
+</linearGradient>
+<symbol id="tooth-icon" viewBox="-50 -65 100 130">
+<path d="M-38 -52 C-44 -50 -46 -38 -46 -22 L-46 5 C-46 12 -40 17 -32 17 L-24 17 L-30 55 C-30 60 -25 62 -22 58 L-12 22 C-10 18 -6 17 0 17 C6 17 10 18 12 22 L22 58 C25 62 30 60 30 55 L24 17 L32 17 C40 17 46 12 46 5 L46 -22 C46 -38 44 -50 38 -52 C30 -58 18 -60 0 -60 C-18 -60 -30 -58 -38 -52 Z" fill="url(#tooth-grad)" stroke="#8c815f" stroke-width="1.6" stroke-linejoin="round"/>
+</symbol>
+</defs>
+</svg>
 <audio id="bg-audio" preload="auto" loop></audio>
+<audio id="gen-audio" preload="auto" loop></audio>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 let ws=null,myId='',inviteCode='',gameState=null,selectedAnswer=-1,timerInterval=null,currentTimeLeft=0,shuffleAnimating=false;
@@ -338,12 +379,22 @@ const DL={leicht:'Leicht',mittel:'Mittel',schwer:'Schwer',extrem:'Extrem'};
 const ML={classic:'Klassisch',elimination:'Elimination',kfo_battle_royale:'KFO Battle Royale',kfo_singleplayer:'KFO Singleplayer'};
 const openaiModels=['gpt-5.4','gpt-5.4-mini','gpt-5.4-nano','gpt-5','gpt-4o','gpt-4o-mini','gpt-4.1'];
 const anthropicModels=['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'];
-const soundDefs=[{key:'intro_sound',label:'Intro-Sound',id:'file-intro'},{key:'background_sound',label:'Background-Song',id:'file-bg'},{key:'wrong_sound',label:'Falsch-Sound',id:'file-wrong'},{key:'answer_sound',label:'Antwort-Sound',id:'file-answer'},{key:'hurry_sound',label:'Zeit-läuft-ab-Sound',id:'file-hurry'},{key:'timeout_sound',label:'Zeit-abgelaufen-Sound',id:'file-timeout'},{key:'question_sound',label:'Nächste-Frage-Sound',id:'file-question'},{key:'allwrong_sound',label:'Alle-falsch-Sound',id:'file-allwrong'},{key:'allcorrect_sound',label:'Alle-richtig-Sound',id:'file-allcorrect'}];
-const volDefs=[{id:'vol-intro',key:'vol_intro',label:'Intro',def:'0.6'},{id:'vol-bg',key:'vol_background',label:'Hintergrund',def:'0.2'},{id:'vol-wrong',key:'vol_wrong',label:'Falsch',def:'0.6'},{id:'vol-answer',key:'vol_answer',label:'Antwort',def:'0.6'},{id:'vol-hurry',key:'vol_hurry',label:'Zeit läuft ab',def:'0.5'},{id:'vol-timeout',key:'vol_timeout',label:'Zeit abgelaufen',def:'0.6'},{id:'vol-question',key:'vol_question',label:'Nächste Frage',def:'0.5'},{id:'vol-allwrong',key:'vol_allwrong',label:'Alle falsch',def:'0.6'},{id:'vol-allcorrect',key:'vol_allcorrect',label:'Alle richtig',def:'0.6'}];
+const soundDefs=[{key:'intro_sound',label:'Intro-Sound',id:'file-intro'},{key:'background_sound',label:'Background-Song',id:'file-bg'},{key:'wrong_sound',label:'Falsch-Sound',id:'file-wrong'},{key:'answer_sound',label:'Antwort-Sound',id:'file-answer'},{key:'hurry_sound',label:'Zeit-läuft-ab-Sound',id:'file-hurry'},{key:'timeout_sound',label:'Zeit-abgelaufen-Sound',id:'file-timeout'},{key:'question_sound',label:'Nächste-Frage-Sound',id:'file-question'},{key:'allwrong_sound',label:'Alle-falsch-Sound',id:'file-allwrong'},{key:'allcorrect_sound',label:'Alle-richtig-Sound',id:'file-allcorrect'},{key:'generating_sound',label:'Generierungs-Musik',id:'file-generating'}];
+const volDefs=[{id:'vol-intro',key:'vol_intro',label:'Intro',def:'0.6'},{id:'vol-bg',key:'vol_background',label:'Hintergrund',def:'0.2'},{id:'vol-wrong',key:'vol_wrong',label:'Falsch',def:'0.6'},{id:'vol-answer',key:'vol_answer',label:'Antwort',def:'0.6'},{id:'vol-hurry',key:'vol_hurry',label:'Zeit läuft ab',def:'0.5'},{id:'vol-timeout',key:'vol_timeout',label:'Zeit abgelaufen',def:'0.6'},{id:'vol-question',key:'vol_question',label:'Nächste Frage',def:'0.5'},{id:'vol-allwrong',key:'vol_allwrong',label:'Alle falsch',def:'0.6'},{id:'vol-allcorrect',key:'vol_allcorrect',label:'Alle richtig',def:'0.6'},{id:'vol-generating',key:'vol_generating',label:'Generierung',def:'0.4'}];
+const SOUND_MAP={intro_sound:'introSound',background_sound:'backgroundSound',wrong_sound:'wrongSound',answer_sound:'answerSound',hurry_sound:'hurrySound',timeout_sound:'timeoutSound',question_sound:'questionSound',allwrong_sound:'allwrongSound',allcorrect_sound:'allcorrectSound',generating_sound:'generatingSound'};
+function buildToothSpinner(){
+  let slices='';for(let i=0;i<12;i++){slices+='<div class="tooth-slice" style="--z:'+((i-5.5)*4)+'px"><svg viewBox="-50 -65 100 130"><use href="#tooth-icon"/></svg></div>'}
+  let dots='<div class="orbit-dot head"></div>';
+  const cfg=[[8,.85],[16,.7],[24,.58],[32,.48],[40,.4],[50,.32],[60,.25],[72,.18],[86,.12],[102,.07],[120,.04]];
+  cfg.forEach(c=>{dots+='<div class="orbit-dot" style="--a:-'+c[0]+'deg;--o:'+c[1]+'"></div>'});
+  return '<div class="tooth-stage"><div class="tooth-iso"><div class="tooth-rot">'+slices+'</div><div class="orbit-rot">'+dots+'</div></div></div>'
+}
+function mountToothSpinners(){const html=buildToothSpinner();document.querySelectorAll('.tooth-mount').forEach(el=>{if(!el.firstChild)el.innerHTML=html})}
 function getCookie(name){const m=document.cookie.match('(^|;)\\s*'+name+'\\s*=\\s*([^;]+)');return m?m[2]:''}
 async function apiFetch(url,opts={}){const method=opts.method||'GET';const headers=opts.headers||{};if(method!=='GET'&&!opts.nocsrf){headers['X-CSRF-Token']=getCookie('heinen_csrf')}return fetch(url,{...opts,headers})}
 
 (async function(){
+  mountToothSpinners();
   const p=new URLSearchParams(location.search);const inv=p.get('join');
   await loadSounds();await loadTutorial();
   if(inv){joinPending=inv;showScreen('join');return}
@@ -354,7 +405,7 @@ async function apiFetch(url,opts={}){const method=opts.method||'GET';const heade
   showScreen('home');updateNav();loadLobbies();
 })();
 
-async function loadSounds(){try{const r=await fetch('/api/global-sounds');const d=await r.json();globalSounds={introSound:d.intro_sound||'',backgroundSound:d.background_sound||'',wrongSound:d.wrong_sound||'',answerSound:d.answer_sound||'',hurrySound:d.hurry_sound||'',timeoutSound:d.timeout_sound||'',questionSound:d.question_sound||'',allwrongSound:d.allwrong_sound||'',allcorrectSound:d.allcorrect_sound||'',volIntro:parseFloat(d.vol_intro)||0.6,volBg:parseFloat(d.vol_background)||0.2,volWrong:parseFloat(d.vol_wrong)||0.6,volAnswer:parseFloat(d.vol_answer)||0.6,volHurry:parseFloat(d.vol_hurry)||0.5,volTimeout:parseFloat(d.vol_timeout)||0.6,volQuestion:parseFloat(d.vol_question)||0.5,volAllwrong:parseFloat(d.vol_allwrong)||0.6,volAllcorrect:parseFloat(d.vol_allcorrect)||0.6}}catch(e){}}
+async function loadSounds(){try{const r=await fetch('/api/global-sounds');const d=await r.json();globalSounds={introSound:d.intro_sound||'',backgroundSound:d.background_sound||'',wrongSound:d.wrong_sound||'',answerSound:d.answer_sound||'',hurrySound:d.hurry_sound||'',timeoutSound:d.timeout_sound||'',questionSound:d.question_sound||'',allwrongSound:d.allwrong_sound||'',allcorrectSound:d.allcorrect_sound||'',generatingSound:d.generating_sound||'',volIntro:parseFloat(d.vol_intro)||0.6,volBg:parseFloat(d.vol_background)||0.2,volWrong:parseFloat(d.vol_wrong)||0.6,volAnswer:parseFloat(d.vol_answer)||0.6,volHurry:parseFloat(d.vol_hurry)||0.5,volTimeout:parseFloat(d.vol_timeout)||0.6,volQuestion:parseFloat(d.vol_question)||0.5,volAllwrong:parseFloat(d.vol_allwrong)||0.6,volAllcorrect:parseFloat(d.vol_allcorrect)||0.6,volGenerating:parseFloat(d.vol_generating)||0.4}}catch(e){}}
 async function loadTutorial(){try{const r=await fetch('/api/tutorial');const d=await r.json();tutorialHtml=markdownToHtml(d.content||'')}catch(e){}}
 async function loadLobbies(){try{const r=await fetch('/api/lobbies');const lobbies=await r.json();const el=document.getElementById('lobby-list');
   if(!lobbies||lobbies.length===0){el.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px">Keine offenen Lobbys vorhanden.</div>';return}
@@ -367,7 +418,7 @@ function updateNav(){const n=document.getElementById('nav-bar');const hpb=docume
   if(currentUser){n.innerHTML='<span style="color:var(--text2);font-size:.75rem;align-self:center">'+esc(currentUser.username)+'</span><button class="nav-btn" onclick="doLogout()">Abmelden</button>';if(hpb)hpb.style.display='inline-block';if(hlb)hlb.style.display='none'}
   else{n.innerHTML='';if(hpb)hpb.style.display='none';if(hlb)hlb.style.display='inline-block'}}
 function goHome(){hideQuestions();if(gameState&&['question','results','intro','loading','refill','tutorial'].includes(gameState.phase)){if(!confirm('Spiel wirklich verlassen?'))return}
-  gameState=null;stopBg();if(ws){try{ws.close()}catch(e){}}ws=null;myId='';inviteCode='';sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');
+  gameState=null;stopBg();stopGenSound();if(ws){try{ws.close()}catch(e){}}ws=null;myId='';inviteCode='';sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');
   history.replaceState(null,'','/');showScreen('home');updateNav();loadLobbies()}
 function showScreen(name){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));const el=document.getElementById('screen-'+name);if(el)el.classList.add('active');
   if(name==='dashboard'&&currentUser){document.getElementById('welcome-text').textContent='Willkommen, '+currentUser.username+'!';document.getElementById('btn-admin').style.display=currentUser.isAdmin?'block':'none'}
@@ -408,8 +459,8 @@ async function toggleAdmin(id,make){await apiFetch('/api/users',{method:'PUT',he
 function uploadSound(type,inputId){const input=document.getElementById(inputId);const f=input&&input.files[0];if(!f){showToast('Datei auswählen',1);return}if(f.size>20*1024*1024){showToast('Max 20 MB',1);return}
   const fd=new FormData();fd.append('type',type);fd.append('file',f);const xhr=new XMLHttpRequest();xhr.setRequestHeader('X-CSRF-Token',getCookie('heinen_csrf'));xhr.onload=async function(){try{const d=JSON.parse(xhr.responseText);if(d.ok){showToast('Hochgeladen!',0);input.value='';await loadSounds();loadAdmin()}else showToast(d.error||'Fehler',1)}catch(e){showToast('Serverfehler',1)}};xhr.onerror=()=>showToast('Netzwerkfehler',1);xhr.open('POST','/api/sounds');xhr.send(fd)}
 async function deleteSound(type){await apiFetch('/api/sounds',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({type})});showToast('Entfernt',0);await loadSounds();loadAdmin()}
-let pAudio=null;async function previewSound(type){await loadSounds();const map={intro_sound:'introSound',background_sound:'backgroundSound',wrong_sound:'wrongSound',answer_sound:'answerSound',hurry_sound:'hurrySound',timeout_sound:'timeoutSound',question_sound:'questionSound',allwrong_sound:'allwrongSound',allcorrect_sound:'allcorrectSound'};const url=globalSounds[map[type]];if(!url){showToast('Nicht hinterlegt',1);return}if(pAudio){pAudio.pause();pAudio=null}pAudio=new Audio(url);pAudio.volume=0.6;const p=pAudio.play();if(p&&p.catch)p.catch(e=>showToast('Fehler',1));setTimeout(()=>{if(pAudio){pAudio.pause();pAudio=null}},10000)}
-function previewVol(soundKey,sliderId){const map={intro_sound:'introSound',background_sound:'backgroundSound',wrong_sound:'wrongSound',answer_sound:'answerSound',hurry_sound:'hurrySound',timeout_sound:'timeoutSound',question_sound:'questionSound',allwrong_sound:'allwrongSound',allcorrect_sound:'allcorrectSound'};const url=globalSounds[map[soundKey]];if(!url){showToast('Nicht hinterlegt',1);return}const vol=parseFloat(document.getElementById(sliderId).value);if(pAudio){pAudio.pause();pAudio=null}pAudio=new Audio(url);pAudio.volume=vol;const p=pAudio.play();if(p&&p.catch)p.catch(()=>{});setTimeout(()=>{if(pAudio){pAudio.pause();pAudio=null}},5000)}
+let pAudio=null;async function previewSound(type){await loadSounds();const url=globalSounds[SOUND_MAP[type]];if(!url){showToast('Nicht hinterlegt',1);return}if(pAudio){pAudio.pause();pAudio=null}pAudio=new Audio(url);pAudio.volume=0.6;const p=pAudio.play();if(p&&p.catch)p.catch(e=>showToast('Fehler',1));setTimeout(()=>{if(pAudio){pAudio.pause();pAudio=null}},10000)}
+function previewVol(soundKey,sliderId){const url=globalSounds[SOUND_MAP[soundKey]];if(!url){showToast('Nicht hinterlegt',1);return}const vol=parseFloat(document.getElementById(sliderId).value);if(pAudio){pAudio.pause();pAudio=null}pAudio=new Audio(url);pAudio.volume=vol;const p=pAudio.play();if(p&&p.catch)p.catch(()=>{});setTimeout(()=>{if(pAudio){pAudio.pause();pAudio=null}},5000)}
 async function loadLogs(){
   try{
     const search=document.getElementById('log-search').value;
@@ -776,10 +827,12 @@ function qeGenOpen(){
 }
 function qeGenClose(){
   clearInterval(_qeGenTimer);_qeGenTimer=null;
+  stopGenSound();
   document.getElementById('qe-gen-modal').style.display='none';
   qeGenShowForm()
 }
 function qeGenShowForm(){
+  stopGenSound();
   document.getElementById('qe-gen-form').style.display='';
   document.getElementById('qe-gen-loading').style.display='none';
   document.getElementById('qe-gen-error').style.display='none'
@@ -791,6 +844,7 @@ function qeGenShowLoading(){
   clearInterval(_qeGenTimer);_qeGenTimer=null;
   const barEl=document.getElementById('qe-gen-bar');
   if(barEl){barEl.style.transition='none';barEl.style.width='0%'}
+  startGenSound()
 }
 function qeGenSetBatchProgress(b,total){
   clearInterval(_qeGenTimer);
@@ -812,6 +866,7 @@ function qeGenSetBatchProgress(b,total){
 }
 function qeGenShowError(msg){
   clearInterval(_qeGenTimer);_qeGenTimer=null;
+  stopGenSound();
   document.getElementById('qe-gen-form').style.display='none';
   document.getElementById('qe-gen-loading').style.display='none';
   document.getElementById('qe-gen-error').style.display='';
@@ -1137,6 +1192,9 @@ function unlockAudio(){
   bg.src=SILENT_WAV;bg.load();
   const p=bg.play();
   if(p&&p.then){p.then(()=>{bg.pause();bg.currentTime=0;if(prevSrc)bg.src=prevSrc}).catch(()=>{})}
+  // Unlock gen-audio too (used during question generation)
+  const ga=document.getElementById('gen-audio');
+  if(ga){const prev2=ga.src;ga.src=SILENT_WAV;ga.load();const gp=ga.play();if(gp&&gp.then){gp.then(()=>{ga.pause();ga.currentTime=0;if(prev2)ga.src=prev2}).catch(()=>{})}}
   // Unlock pool elements
   audioPool.forEach(a=>{a.src=SILENT_WAV;const pp=a.play();if(pp&&pp.then)pp.then(()=>{a.pause();a.currentTime=0}).catch(()=>{})});
   // Unlock Web Audio API
@@ -1190,7 +1248,19 @@ function startBg(){
   }
 }
 function stopBg(){const a=document.getElementById('bg-audio');a.pause();a.currentTime=0;bgStarted=false}
-function toggleMute(){bgMuted=!bgMuted;const a=document.getElementById('bg-audio'),b=document.getElementById('mute-btn');if(bgMuted){a.pause();b.innerHTML='&#128264;';b.classList.add('muted')}else{if(bgStarted)tryPlayBg(3);b.innerHTML='&#128266;';b.classList.remove('muted')}}
+let genStarted=false,genCurrentSrc='';
+function startGenSound(){
+  if(!globalSounds.generatingSound)return;
+  const a=document.getElementById('gen-audio');if(!a)return;
+  const target=absURL(globalSounds.generatingSound);
+  if(genCurrentSrc!==target){a.src=globalSounds.generatingSound;genCurrentSrc=target;a.load()}
+  a.volume=globalSounds.volGenerating||0.4;a.loop=true;genStarted=true;
+  if(bgMuted)return;
+  const tryPlay=(n)=>{const p=a.play();if(p&&p.catch)p.catch(()=>{if(n>0)setTimeout(()=>tryPlay(n-1),200)})};
+  if(a.readyState>=2)tryPlay(3);else{const onReady=()=>{a.removeEventListener('canplay',onReady);tryPlay(3)};a.addEventListener('canplay',onReady);tryPlay(3)}
+}
+function stopGenSound(){const a=document.getElementById('gen-audio');if(!a)return;try{a.pause();a.currentTime=0}catch(e){}genStarted=false}
+function toggleMute(){bgMuted=!bgMuted;const a=document.getElementById('bg-audio'),g=document.getElementById('gen-audio'),b=document.getElementById('mute-btn');if(bgMuted){a.pause();if(g)g.pause();b.innerHTML='&#128264;';b.classList.add('muted')}else{if(bgStarted)tryPlayBg(3);if(g&&genStarted){const p=g.play();if(p&&p.catch)p.catch(()=>{})}b.innerHTML='&#128266;';b.classList.remove('muted')}}
 function adjustBgVol(v){const a=document.getElementById('bg-audio');a.volume=parseFloat(v);if(bgMuted&&parseFloat(v)>0){bgMuted=false;const b=document.getElementById('mute-btn');b.innerHTML='&#128266;';b.classList.remove('muted');if(bgStarted)tryPlayBg(3)}}
 
 // WebSocket
@@ -1206,7 +1276,7 @@ function send(t,p){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:t,paylo
 function handleMessage(msg){switch(msg.type){
   case 'joined':case 'reconnected':myId=msg.payload.playerId;inviteCode=msg.payload.inviteCode;sessionStorage.setItem('h_invite',inviteCode);break;
   case 'state':gameState=msg.payload;if(!shuffleAnimating)renderGame();break;case 'error':showToast(msg.payload.message,1);break;
-  case 'kicked':showToast(msg.payload.message,1);gameState=null;stopBg();sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');showScreen('home');break;
+  case 'kicked':showToast(msg.payload.message,1);gameState=null;stopBg();stopGenSound();sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');showScreen('home');break;
   case 'shuffle_animation':shuffleAnimation(msg.payload);break}}
 
 function joinLobby(code,mode){joinPending=code;joinNeedsPw=mode==='pw';document.getElementById('join-pw-group').style.display=joinNeedsPw?'block':'none';showScreen('join')}
@@ -1281,8 +1351,9 @@ function shuffleAnimation(data){
 
 let lastPhase='';
 function renderGame(){if(!gameState)return;const ph=gameState.phase,isHost=myId===gameState.hostId;
+  if(ph!=='loading'&&ph!=='refill'&&genStarted)stopGenSound();
   if(ph==='lobby'){showScreen('lobby');renderLobby(isHost)}
-  else if(ph==='loading'){showScreen('loading')}else if(ph==='refill'){showScreen('refill')}
+  else if(ph==='loading'){showScreen('loading');startGenSound()}else if(ph==='refill'){showScreen('refill');startGenSound()}
   else if(ph==='tutorial'){showScreen('tutorial');renderTutorial(isHost)}
   else if(ph==='intro'){showScreen('intro');playSound(globalSounds.introSound,globalSounds.volIntro);startBg()}
   else if(ph==='question'){showScreen('game');if(lastPhase!=='question'){selectedAnswer=-1;playSound(globalSounds.questionSound,globalSounds.volQuestion);renderQuestion();}renderGamePlayers(isHost);startTimer()}
@@ -1429,6 +1500,96 @@ function showToast(msg,isErr){const el=document.getElementById('toast');el.textC
 document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 document.getElementById('login-user').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 document.getElementById('join-name').addEventListener('keydown',e=>{if(e.key==='Enter')doJoin()});
+
+// ── Passkey helpers ──────────────────────────────────────────────────────────
+function b64url(buf){return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'')}
+function fromB64url(s){const pad=s+'==='.slice((s.length+3)%4);const bin=atob(pad.replace(/-/g,'+').replace(/_/g,'/'));const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return b.buffer}
+
+// ── Passkey Login ────────────────────────────────────────────────────────────
+async function doPasskeyLogin(){
+  if(!window.PublicKeyCredential){showToast('Passkeys nicht unterstützt',1);return}
+  try{
+    const r1=await fetch('/api/passkey/login/begin',{method:'POST'});
+    if(!r1.ok){const d=await r1.json();showToast(d.error||'Fehler',1);return}
+    const sid=r1.headers.get('X-WA-Session');
+    const opts=await r1.json();
+    opts.publicKey.challenge=fromB64url(opts.publicKey.challenge);
+    if(opts.publicKey.allowCredentials){
+      opts.publicKey.allowCredentials=opts.publicKey.allowCredentials.map(c=>({...c,id:fromB64url(c.id)}))
+    }
+    const assertion=await navigator.credentials.get(opts);
+    const body={
+      id:assertion.id,
+      rawId:b64url(assertion.rawId),
+      type:assertion.type,
+      response:{
+        authenticatorData:b64url(assertion.response.authenticatorData),
+        clientDataJSON:b64url(assertion.response.clientDataJSON),
+        signature:b64url(assertion.response.signature),
+        userHandle:assertion.response.userHandle?b64url(assertion.response.userHandle):null
+      }
+    };
+    const r2=await fetch('/api/passkey/login/finish?sid='+encodeURIComponent(sid),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d2=await r2.json();
+    if(!r2.ok){showToast(d2.error||'Fehler',1);return}
+    currentUser=d2;showScreen('dashboard');updateNav()
+  }catch(e){
+    if(e.name!=='NotAllowedError')showToast('Passkey-Fehler: '+e.message,1)
+  }
+}
+
+// ── Passkey Verwaltung ───────────────────────────────────────────────────────
+async function loadPasskeys(){
+  const el=document.getElementById('passkeys-list');
+  if(!el)return;
+  el.innerHTML='<div style="color:var(--text2);font-size:.82rem">Lade\u2026</div>';
+  try{
+    const r=await fetch('/api/passkey/credentials');
+    const creds=await r.json();
+    if(!creds||!creds.length){el.innerHTML='<div style="color:var(--text2);font-size:.82rem">Noch keine Passkeys registriert.</div>';return}
+    el.innerHTML=creds.map(c=>'<div class="user-row"><div class="user-info"><span>\uD83D\uDD11 '+esc(c.name)+'</span><span style="font-size:.68rem;color:var(--text2);margin-left:8px">'+esc(c.createdAt)+'</span></div><div class="user-actions"><button class="ib danger" onclick="deletePasskey(\''+esc(c.id)+'\')">Löschen</button></div></div>').join('')
+  }catch(e){el.innerHTML='<div style="color:var(--wrong);font-size:.82rem">Fehler beim Laden.</div>'}
+}
+
+async function doRegisterPasskey(){
+  if(!window.PublicKeyCredential){showToast('Passkeys nicht unterstützt',1);return}
+  const name=document.getElementById('passkey-name').value.trim()||'Passkey';
+  try{
+    const r1=await fetch('/api/passkey/register/begin',{method:'POST'});
+    if(!r1.ok){const d=await r1.json();showToast(d.error||'Fehler',1);return}
+    const sid=r1.headers.get('X-WA-Session');
+    const opts=await r1.json();
+    opts.publicKey.challenge=fromB64url(opts.publicKey.challenge);
+    opts.publicKey.user.id=fromB64url(opts.publicKey.user.id);
+    if(opts.publicKey.excludeCredentials){
+      opts.publicKey.excludeCredentials=opts.publicKey.excludeCredentials.map(c=>({...c,id:fromB64url(c.id)}))
+    }
+    const cred=await navigator.credentials.create(opts);
+    const body={
+      id:cred.id,
+      rawId:b64url(cred.rawId),
+      type:cred.type,
+      response:{
+        attestationObject:b64url(cred.response.attestationObject),
+        clientDataJSON:b64url(cred.response.clientDataJSON)
+      }
+    };
+    const r2=await fetch('/api/passkey/register/finish?sid='+encodeURIComponent(sid)+'&name='+encodeURIComponent(name),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d2=await r2.json();
+    if(!r2.ok){showToast(d2.error||'Fehler',1);return}
+    showToast('Passkey registriert!',0);document.getElementById('passkey-name').value='';loadPasskeys()
+  }catch(e){
+    if(e.name!=='NotAllowedError')showToast('Passkey-Fehler: '+e.message,1)
+  }
+}
+
+async function deletePasskey(id){
+  if(!confirm('Passkey wirklich löschen?'))return;
+  const r=await fetch('/api/passkey/credentials',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ID:id})});
+  const d=await r.json();
+  if(!r.ok){showToast(d.error||'Fehler',1);return}
+  showToast('Passkey gelöscht',0);loadPasskeys()
+}
 </script>
 </body>
 </html>` + ""

@@ -305,12 +305,13 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 			"vol_hurry": getSetting("vol_hurry"), "vol_timeout": getSetting("vol_timeout"),
 			"vol_question": getSetting("vol_question"),
 			"vol_allwrong": getSetting("vol_allwrong"), "vol_allcorrect": getSetting("vol_allcorrect"),
+			"vol_generating": getSetting("vol_generating"),
 		})
 	case "POST":
 		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 		var req struct {
-			Provider, Model, OpenaiKey, AnthropicKey, IntroDelay                                    string
-			VolIntro, VolBackground, VolWrong, VolAnswer, VolHurry, VolTimeout, VolQuestion, VolAllwrong, VolAllcorrect string
+			Provider, Model, OpenaiKey, AnthropicKey, IntroDelay                                                          string
+			VolIntro, VolBackground, VolWrong, VolAnswer, VolHurry, VolTimeout, VolQuestion, VolAllwrong, VolAllcorrect, VolGenerating string
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 		if req.Provider != "" {
@@ -354,6 +355,9 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.VolAllcorrect != "" {
 			setSetting("vol_allcorrect", req.VolAllcorrect)
+		}
+		if req.VolGenerating != "" {
+			setSetting("vol_generating", req.VolGenerating)
 		}
 		logInfo(getIP(r), u, "SETTINGS_CHANGE", "")
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
@@ -507,6 +511,7 @@ func handleGlobalSounds(w http.ResponseWriter, r *http.Request) {
 	res["vol_question"] = getSetting("vol_question")
 	res["vol_allwrong"] = getSetting("vol_allwrong")
 	res["vol_allcorrect"] = getSetting("vol_allcorrect")
+	res["vol_generating"] = getSetting("vol_generating")
 	json.NewEncoder(w).Encode(res)
 }
 

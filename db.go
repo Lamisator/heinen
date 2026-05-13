@@ -11,7 +11,7 @@ import (
 
 var db *sql.DB
 
-var soundTypes = []string{"intro_sound", "background_sound", "wrong_sound", "answer_sound", "hurry_sound", "timeout_sound", "question_sound", "allwrong_sound", "allcorrect_sound"}
+var soundTypes = []string{"intro_sound", "background_sound", "wrong_sound", "answer_sound", "hurry_sound", "timeout_sound", "question_sound", "allwrong_sound", "allcorrect_sound", "generating_sound"}
 
 func initDB() {
 	var err error
@@ -31,7 +31,7 @@ func initDB() {
 		"ai_provider": "openai", "ai_model": "gpt-5.4-mini", "intro_delay": "4",
 		"vol_intro": "0.6", "vol_background": "0.2", "vol_wrong": "0.6", "vol_answer": "0.6",
 		"vol_hurry": "0.5", "vol_timeout": "0.6", "vol_question": "0.5",
-		"vol_allwrong": "0.6", "vol_allcorrect": "0.6",
+		"vol_allwrong": "0.6", "vol_allcorrect": "0.6", "vol_generating": "0.4",
 		"dedup_similarity_threshold": "0.85",
 	}
 	for k, v := range defaults {
