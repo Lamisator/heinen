@@ -48,21 +48,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .og{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px}.ob{padding:15px 16px;background:var(--surface);border:2px solid var(--border);border-radius:12px;color:var(--text);font-family:'Outfit',sans-serif;font-size:.9rem;font-weight:500;cursor:pointer;transition:all .2s;text-align:left}.ob:hover:not(.sel):not(.dis){border-color:var(--accent);background:rgba(255,51,102,.05);transform:translateY(-1px)}.ob.sel{border-color:var(--gold)!important;background:rgba(255,215,0,.12)!important;box-shadow:0 0 14px rgba(255,215,0,.35)}.ob.sel .ol{color:var(--gold)}.ob.correct{border-color:var(--correct)!important;background:rgba(0,230,138,.12)!important;box-shadow:0 0 14px rgba(0,230,138,.35)!important}.ob.wrong{border-color:var(--wrong)!important;background:rgba(255,51,102,.18)!important;box-shadow:0 0 22px rgba(255,51,102,.7),0 0 40px rgba(255,51,102,.3)!important;animation:wrong-pulse 1.2s ease-in-out infinite}@keyframes wrong-pulse{0%,100%{box-shadow:0 0 22px rgba(255,51,102,.7),0 0 40px rgba(255,51,102,.3)}50%{box-shadow:0 0 30px rgba(255,51,102,.9),0 0 55px rgba(255,51,102,.5)}}.ob.dis{cursor:default;opacity:.85}.ob.spectator{cursor:default;opacity:.4;pointer-events:none}.ol{font-family:'Space Mono',monospace;font-weight:700;margin-right:8px;color:var(--text2)}.ob.correct .ol{color:var(--correct)}.ob.wrong .ol{color:var(--wrong)}
 .ri{text-align:center;margin:16px 0;font-size:.9rem;color:var(--text2)}.end-container{text-align:center;max-width:600px;margin:30px auto}.winner-display{font-size:1.8rem;font-weight:800;margin:14px 0;background:linear-gradient(135deg,var(--gold),#ffaa00);-webkit-background-clip:text;-webkit-text-fill-color:transparent}.no-winner{font-size:1.3rem;color:var(--text2);margin:14px 0}.end-sub{font-size:.9rem;color:var(--text2);margin-bottom:20px}
 .loading-container{text-align:center;padding:50px 20px}
-.tooth-stage{width:200px;height:200px;margin:0 auto 22px;perspective:680px;perspective-origin:50% 50%}
-.tooth-iso{position:relative;width:100%;height:100%;transform-style:preserve-3d;transform:rotateX(-22deg) rotateZ(-12deg)}
-.tooth-rot{position:absolute;inset:0;transform-style:preserve-3d;animation:tooth-y-spin 4s linear infinite;will-change:transform}
-@keyframes tooth-y-spin{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}
-.tooth-slice{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:translateZ(var(--z,0))}
-.tooth-slice svg{width:108px;height:140px;display:block;overflow:visible;opacity:.82;filter:drop-shadow(0 0 2px rgba(255,215,0,.15))}
-.orbit-rot{position:absolute;inset:0;animation:orbit-z-spin 3s linear infinite reverse;transform-origin:50% 50%;will-change:transform;pointer-events:none}
-@keyframes orbit-z-spin{from{transform:rotateZ(0deg)}to{transform:rotateZ(360deg)}}
-.orbit-dot{position:absolute;left:50%;top:50%;width:7px;height:7px;margin-left:-3.5px;margin-top:-3.5px;background:#fff;border-radius:50%;transform:rotate(var(--a,0deg)) translateX(86px);opacity:var(--o,1);box-shadow:0 0 7px rgba(255,255,255,.55)}
-.orbit-dot.head{width:11px;height:11px;margin-left:-5.5px;margin-top:-5.5px;box-shadow:0 0 14px #fff,0 0 26px rgba(255,255,255,.6)}
+.tooth-stage{width:220px;height:230px;margin:0 auto 22px;perspective:780px;perspective-origin:50% 42%;--r:96px}
+.tooth-iso{position:relative;width:100%;height:100%;transform-style:preserve-3d;transform:rotateX(-16deg)}
+.tooth-rot{position:absolute;inset:0;transform-style:preserve-3d;animation:tooth-spin 4s linear infinite;will-change:transform}
+@keyframes tooth-spin{from{transform:rotateY(0deg)}to{transform:rotateY(-360deg)}}
+.tooth-slice{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;backface-visibility:visible;transform:translateZ(var(--z,0))}
+.tooth-slice.tx{transform:rotateY(90deg) translateZ(var(--z,0))}
+.tooth-slice svg{width:118px;height:152px;display:block;overflow:visible;opacity:.85;filter:drop-shadow(0 0 2px rgba(255,215,0,.18))}
+.orbit-rot{position:absolute;inset:0;transform-style:preserve-3d;animation:orbit-spin 3s linear infinite;will-change:transform;pointer-events:none}
+@keyframes orbit-spin{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}
+.orbit-dot{position:absolute;left:50%;top:50%;width:8px;height:8px;margin-left:-4px;margin-top:-4px;background:radial-gradient(circle at 38% 32%,#fff 0%,#fff 40%,#dcdcec 78%,#9a9ab8 100%);border-radius:50%;box-shadow:0 0 9px rgba(255,255,255,.6);opacity:var(--o,1);animation:dot-orient 3s linear infinite;will-change:transform}
+@keyframes dot-orient{from{transform:rotateY(var(--a,0deg)) translateX(var(--r,96px)) rotateY(calc(-1 * var(--a,0deg))) rotateY(0deg)}to{transform:rotateY(var(--a,0deg)) translateX(var(--r,96px)) rotateY(calc(-1 * var(--a,0deg))) rotateY(-360deg)}}
+.orbit-dot.head{width:11px;height:11px;margin-left:-5.5px;margin-top:-5.5px;background:radial-gradient(circle at 38% 32%,#fff 0%,#fff 55%,#e6e6f6 80%,#b8b8d0 100%);box-shadow:0 0 16px #fff,0 0 30px rgba(255,255,255,.55)}
 .loading-text{color:var(--text2);font-size:.85rem;letter-spacing:.5px}
-.tooth-spinner-mini{display:block;width:130px;height:130px;margin:0 auto}
-.tooth-spinner-mini .tooth-stage{width:130px;height:130px;margin:0;perspective:520px}
-.tooth-spinner-mini .tooth-slice svg{width:72px;height:94px}
-.tooth-spinner-mini .orbit-dot{transform:rotate(var(--a,0deg)) translateX(56px);width:6px;height:6px;margin-left:-3px;margin-top:-3px}
+.tooth-spinner-mini{display:block;width:150px;height:150px;margin:0 auto}
+.tooth-spinner-mini .tooth-stage{width:150px;height:150px;margin:0;perspective:560px;--r:64px}
+.tooth-spinner-mini .tooth-slice svg{width:80px;height:104px}
+.tooth-spinner-mini .orbit-dot{width:6px;height:6px;margin-left:-3px;margin-top:-3px}
 .tooth-spinner-mini .orbit-dot.head{width:9px;height:9px;margin-left:-4.5px;margin-top:-4.5px}
 .sv{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:18px}.sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}.sv-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}.sv-label{font-size:.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px}.sv-value{font-size:.85rem;color:var(--text);font-weight:600}
 .mute-btn{z-index:90;background:var(--surface);border:1px solid var(--border);border-radius:50%;width:44px;height:44px;display:none;align-items:center;justify-content:center;cursor:pointer;font-size:1.2rem;transition:all .2s;color:var(--text)}.mute-btn:hover{border-color:var(--accent)}.mute-btn.muted{color:var(--text2)}
@@ -383,8 +385,13 @@ const soundDefs=[{key:'intro_sound',label:'Intro-Sound',id:'file-intro'},{key:'b
 const volDefs=[{id:'vol-intro',key:'vol_intro',label:'Intro',def:'0.6'},{id:'vol-bg',key:'vol_background',label:'Hintergrund',def:'0.2'},{id:'vol-wrong',key:'vol_wrong',label:'Falsch',def:'0.6'},{id:'vol-answer',key:'vol_answer',label:'Antwort',def:'0.6'},{id:'vol-hurry',key:'vol_hurry',label:'Zeit läuft ab',def:'0.5'},{id:'vol-timeout',key:'vol_timeout',label:'Zeit abgelaufen',def:'0.6'},{id:'vol-question',key:'vol_question',label:'Nächste Frage',def:'0.5'},{id:'vol-allwrong',key:'vol_allwrong',label:'Alle falsch',def:'0.6'},{id:'vol-allcorrect',key:'vol_allcorrect',label:'Alle richtig',def:'0.6'},{id:'vol-generating',key:'vol_generating',label:'Generierung',def:'0.4'}];
 const SOUND_MAP={intro_sound:'introSound',background_sound:'backgroundSound',wrong_sound:'wrongSound',answer_sound:'answerSound',hurry_sound:'hurrySound',timeout_sound:'timeoutSound',question_sound:'questionSound',allwrong_sound:'allwrongSound',allcorrect_sound:'allcorrectSound',generating_sound:'generatingSound'};
 function buildToothSpinner(){
-  let slices='';for(let i=0;i<12;i++){slices+='<div class="tooth-slice" style="--z:'+((i-5.5)*4)+'px"><svg viewBox="-50 -65 100 130"><use href="#tooth-icon"/></svg></div>'}
+  let slices='';
+  // Z-stacked silhouette (visible at 0°/180° rotation)
+  for(let i=0;i<7;i++){slices+='<div class="tooth-slice" style="--z:'+((i-3)*4)+'px"><svg viewBox="-50 -65 100 130"><use href="#tooth-icon"/></svg></div>'}
+  // X-stacked silhouette rotated 90° around Y (visible at 90°/270° rotation, gives constant 3D thickness)
+  for(let i=0;i<7;i++){slices+='<div class="tooth-slice tx" style="--z:'+((i-3)*4)+'px"><svg viewBox="-50 -65 100 130"><use href="#tooth-icon"/></svg></div>'}
   let dots='<div class="orbit-dot head"></div>';
+  // Trail dots: negative --a angles (wrapper rotates +Y, so the trail behind the head sits at negative wrapper-local angles)
   const cfg=[[8,.85],[16,.7],[24,.58],[32,.48],[40,.4],[50,.32],[60,.25],[72,.18],[86,.12],[102,.07],[120,.04]];
   cfg.forEach(c=>{dots+='<div class="orbit-dot" style="--a:-'+c[0]+'deg;--o:'+c[1]+'"></div>'});
   return '<div class="tooth-stage"><div class="tooth-iso"><div class="tooth-rot">'+slices+'</div><div class="orbit-rot">'+dots+'</div></div></div>'
