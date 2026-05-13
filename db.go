@@ -24,6 +24,7 @@ func initDB() {
 
 	initSessionTable()
 	initGameHistoryTables()
+	initPasskeyTables()
 	os.MkdirAll("sounds", 0750)
 	os.MkdirAll("fonts", 0750)
 

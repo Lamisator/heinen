@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
+	"strings"
 )
 
 const CSRFCookie = "heinen_csrf"
@@ -31,9 +32,12 @@ func setCSRFToken(w http.ResponseWriter) string {
 	return token
 }
 
-// verifyCSRFToken checks the double-submit cookie pattern
-// Token should be in X-CSRF-Token header and match the cookie value
+// verifyCSRFToken checks the double-submit cookie pattern.
+// JSON requests are exempt because cross-origin form submissions cannot set Content-Type: application/json.
 func verifyCSRFToken(r *http.Request) bool {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		return true
+	}
 	cookie, err := r.Cookie(CSRFCookie)
 	if err != nil {
 		return false

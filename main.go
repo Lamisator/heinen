@@ -62,6 +62,7 @@ func main() {
 		for range ticker.C {
 			cleanExpiredSessions()
 			cleanExpiredPlayerTokens()
+			cleanExpiredPasskeySessions()
 			limiter.CleanExpired()
 		}
 	}()
@@ -89,6 +90,13 @@ func main() {
 	mux.HandleFunc("/api/admin/questions", handleAdminQuestions)
 	mux.HandleFunc("/api/admin/questions/generate", handleAdminGenerateQuestions)
 	mux.HandleFunc("/api/questions/report", handleReportQuestion)
+
+	// Passkey / WebAuthn
+	mux.HandleFunc("/api/passkey/register/begin", handlePasskeyRegisterBegin)
+	mux.HandleFunc("/api/passkey/register/finish", handlePasskeyRegisterFinish)
+	mux.HandleFunc("/api/passkey/login/begin", handlePasskeyLoginBegin)
+	mux.HandleFunc("/api/passkey/login/finish", handlePasskeyLoginFinish)
+	mux.HandleFunc("/api/passkey/credentials", handlePasskeyCredentials)
 
 	// Static and dynamic
 	mux.HandleFunc("/sounds/", handleSoundFile)
