@@ -101,6 +101,7 @@ func main() {
 	// Static and dynamic
 	mux.HandleFunc("/sounds/", handleSoundFile)
 	mux.Handle("/fonts/", http.StripPrefix("/fonts/", http.FileServer(http.Dir("fonts"))))
+	mux.Handle("/js/", http.StripPrefix("/js/", http.FileServer(http.Dir("js"))))
 	mux.HandleFunc("/ws", handleWS)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		setCSRFToken(w)

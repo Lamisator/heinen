@@ -380,7 +380,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 </svg>
 <audio id="bg-audio" preload="auto" loop></audio>
 <audio id="gen-audio" preload="auto" loop></audio>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/js/qrcode.min.js"></script>
 <script>
 let ws=null,myId='',inviteCode='',gameState=null,selectedAnswer=-1,timerInterval=null,currentTimeLeft=0,shuffleAnimating=false;
 let currentUser=null,joinPending='',joinNeedsPw=false,joinLobbyPw='';
