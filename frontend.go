@@ -49,11 +49,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .ri{text-align:center;margin:16px 0;font-size:.9rem;color:var(--text2)}.end-container{text-align:center;max-width:600px;margin:30px auto}.winner-display{font-size:1.8rem;font-weight:800;margin:14px 0;background:linear-gradient(135deg,var(--gold),#ffaa00);-webkit-background-clip:text;-webkit-text-fill-color:transparent}.no-winner{font-size:1.3rem;color:var(--text2);margin:14px 0}.end-sub{font-size:.9rem;color:var(--text2);margin-bottom:20px}
 .loading-container{text-align:center;padding:50px 20px}
 .tooth-stage{width:220px;height:230px;margin:0 auto 22px;perspective:780px;perspective-origin:50% 42%;transform-style:preserve-3d;position:relative;--r:96px}
-.tooth-iso{position:absolute;inset:0;transform-style:preserve-3d;animation:tooth-spin 4s linear infinite;will-change:transform}
-@keyframes tooth-spin{from{transform:rotateY(0deg)}to{transform:rotateY(-360deg)}}
-.tooth-rot{position:absolute;inset:0;transform-style:preserve-3d;transform:rotateX(-18deg)}
-.tooth-face{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
-.tooth-face svg{width:130px;height:170px;display:block;overflow:visible;filter:drop-shadow(0 8px 14px rgba(0,0,0,.55)) drop-shadow(0 0 3px rgba(255,215,0,.25))}
+.tooth-canvas{position:absolute;inset:0;margin:auto;display:block;filter:drop-shadow(0 8px 14px rgba(0,0,0,.55)) drop-shadow(0 0 3px rgba(255,215,0,.25))}
 .orbit-rot{position:absolute;inset:0;transform-style:preserve-3d;animation:orbit-spin 3s linear infinite;will-change:transform;pointer-events:none}
 @keyframes orbit-spin{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}
 .orbit-dot{position:absolute;left:50%;top:50%;width:8px;height:8px;margin-left:-4px;margin-top:-4px;background:radial-gradient(circle at 38% 32%,#fff 0%,#fff 40%,#dcdcec 78%,#9a9ab8 100%);border-radius:50%;box-shadow:0 0 9px rgba(255,255,255,.6);opacity:var(--o,1);animation:dot-orient 3s linear infinite;will-change:transform}
@@ -62,7 +58,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .loading-text{color:var(--text2);font-size:.85rem;letter-spacing:.5px}
 .tooth-spinner-mini{display:block;width:150px;height:150px;margin:0 auto}
 .tooth-spinner-mini .tooth-stage{width:150px;height:150px;margin:0;perspective:560px;--r:64px}
-.tooth-spinner-mini .tooth-face svg{width:88px;height:116px}
 .tooth-spinner-mini .orbit-dot{width:6px;height:6px;margin-left:-3px;margin-top:-3px}
 .tooth-spinner-mini .orbit-dot.head{width:9px;height:9px;margin-left:-4.5px;margin-top:-4.5px}
 .sv{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:18px}.sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}.sv-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}.sv-label{font-size:.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px}.sv-value{font-size:.85rem;color:var(--text);font-weight:600}
@@ -357,30 +352,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <input type="range" id="bg-vol-slider" min="0" max="1" step="0.05" value="0.2" style="width:80px;cursor:pointer" oninput="adjustBgVol(this.value)"/>
 </div>
 <div class="toast" id="toast"></div>
-<svg width="0" height="0" style="position:absolute;width:0;height:0" aria-hidden="true" focusable="false">
-<defs>
-<radialGradient id="tooth-grad" cx="34%" cy="26%" r="92%" fx="30%" fy="20%">
-<stop offset="0" stop-color="#fffceb"/>
-<stop offset=".35" stop-color="#f4ead0"/>
-<stop offset=".75" stop-color="#cbbf99"/>
-<stop offset="1" stop-color="#7d7152"/>
-</radialGradient>
-<linearGradient id="tooth-shade" x1="-50" y1="0" x2="50" y2="0" gradientUnits="userSpaceOnUse">
-<stop offset="0" stop-color="rgba(0,0,0,0)"/>
-<stop offset=".55" stop-color="rgba(0,0,0,0)"/>
-<stop offset="1" stop-color="rgba(60,40,10,.45)"/>
-</linearGradient>
-<symbol id="tooth-icon" viewBox="-50 -65 100 130">
-<path d="M-38 -52 C-44 -50 -46 -38 -46 -22 L-46 5 C-46 12 -40 17 -32 17 L-24 17 L-30 55 C-30 60 -25 62 -22 58 L-12 22 C-10 18 -6 17 0 17 C6 17 10 18 12 22 L22 58 C25 62 30 60 30 55 L24 17 L32 17 C40 17 46 12 46 5 L46 -22 C46 -38 44 -50 38 -52 C30 -58 18 -60 0 -60 C-18 -60 -30 -58 -38 -52 Z" fill="url(#tooth-grad)" stroke="#5a5037" stroke-width="1.8" stroke-linejoin="round"/>
-<path d="M-38 -52 C-44 -50 -46 -38 -46 -22 L-46 5 C-46 12 -40 17 -32 17 L-24 17 L-30 55 C-30 60 -25 62 -22 58 L-12 22 C-10 18 -6 17 0 17 C6 17 10 18 12 22 L22 58 C25 62 30 60 30 55 L24 17 L32 17 C40 17 46 12 46 5 L46 -22 C46 -38 44 -50 38 -52 C30 -58 18 -60 0 -60 C-18 -60 -30 -58 -38 -52 Z" fill="url(#tooth-shade)" stroke="none"/>
-<path d="M-30 -52 C-38 -45 -40 -30 -34 -16 C-20 -20 -16 -38 -23 -55 C-26 -54 -28 -53 -30 -52 Z" fill="rgba(255,255,255,.55)" stroke="none"/>
-<path d="M-2 22 C-1 30 -1 40 -3 55 M2 22 C1 30 1 40 3 55" stroke="rgba(70,55,30,.35)" stroke-width="1" fill="none" stroke-linecap="round"/>
-</symbol>
-</defs>
-</svg>
 <audio id="bg-audio" preload="auto" loop></audio>
 <audio id="gen-audio" preload="auto" loop></audio>
 <script src="/js/qrcode.min.js"></script>
+<script src="/js/zdog.min.js"></script>
+<script src="/js/tooth3d.js"></script>
 <script>
 let ws=null,myId='',inviteCode='',gameState=null,selectedAnswer=-1,timerInterval=null,currentTimeLeft=0,shuffleAnimating=false;
 let currentUser=null,joinPending='',joinNeedsPw=false,joinLobbyPw='';
@@ -392,15 +368,7 @@ const anthropicModels=['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-2
 const soundDefs=[{key:'intro_sound',label:'Intro-Sound',id:'file-intro'},{key:'background_sound',label:'Background-Song',id:'file-bg'},{key:'wrong_sound',label:'Falsch-Sound',id:'file-wrong'},{key:'answer_sound',label:'Antwort-Sound',id:'file-answer'},{key:'hurry_sound',label:'Zeit-läuft-ab-Sound',id:'file-hurry'},{key:'timeout_sound',label:'Zeit-abgelaufen-Sound',id:'file-timeout'},{key:'question_sound',label:'Nächste-Frage-Sound',id:'file-question'},{key:'allwrong_sound',label:'Alle-falsch-Sound',id:'file-allwrong'},{key:'allcorrect_sound',label:'Alle-richtig-Sound',id:'file-allcorrect'},{key:'generating_sound',label:'Generierungs-Musik',id:'file-generating'}];
 const volDefs=[{id:'vol-intro',key:'vol_intro',label:'Intro',def:'0.6'},{id:'vol-bg',key:'vol_background',label:'Hintergrund',def:'0.2'},{id:'vol-wrong',key:'vol_wrong',label:'Falsch',def:'0.6'},{id:'vol-answer',key:'vol_answer',label:'Antwort',def:'0.6'},{id:'vol-hurry',key:'vol_hurry',label:'Zeit läuft ab',def:'0.5'},{id:'vol-timeout',key:'vol_timeout',label:'Zeit abgelaufen',def:'0.6'},{id:'vol-question',key:'vol_question',label:'Nächste Frage',def:'0.5'},{id:'vol-allwrong',key:'vol_allwrong',label:'Alle falsch',def:'0.6'},{id:'vol-allcorrect',key:'vol_allcorrect',label:'Alle richtig',def:'0.6'},{id:'vol-generating',key:'vol_generating',label:'Generierung',def:'0.4'}];
 const SOUND_MAP={intro_sound:'introSound',background_sound:'backgroundSound',wrong_sound:'wrongSound',answer_sound:'answerSound',hurry_sound:'hurrySound',timeout_sound:'timeoutSound',question_sound:'questionSound',allwrong_sound:'allwrongSound',allcorrect_sound:'allcorrectSound',generating_sound:'generatingSound'};
-function buildToothSpinner(){
-  const tooth='<div class="tooth-face"><svg viewBox="-50 -65 100 130"><use href="#tooth-icon"/></svg></div>';
-  let dots='<div class="orbit-dot head"></div>';
-  // Trail dots: negative --a angles (wrapper rotates +Y, so the trail behind the head sits at negative wrapper-local angles)
-  const cfg=[[8,.85],[16,.7],[24,.58],[32,.48],[40,.4],[50,.32],[60,.25],[72,.18],[86,.12],[102,.07],[120,.04]];
-  cfg.forEach(c=>{dots+='<div class="orbit-dot" style="--a:-'+c[0]+'deg;--o:'+c[1]+'"></div>'});
-  return '<div class="tooth-stage"><div class="tooth-iso"><div class="tooth-rot">'+tooth+'</div></div><div class="orbit-rot">'+dots+'</div></div>'
-}
-function mountToothSpinners(){const html=buildToothSpinner();document.querySelectorAll('.tooth-mount').forEach(el=>{if(!el.firstChild)el.innerHTML=html})}
+function mountToothSpinners(){if(window.Tooth3D)Tooth3D.mountAll()}
 function getCookie(name){const m=document.cookie.match('(^|;)\\s*'+name+'\\s*=\\s*([^;]+)');return m?m[2]:''}
 async function apiFetch(url,opts={}){const method=opts.method||'GET';const headers=opts.headers||{};if(method!=='GET'&&!opts.nocsrf){headers['X-CSRF-Token']=getCookie('heinen_csrf')}return fetch(url,{...opts,headers})}
 
