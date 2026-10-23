@@ -70,6 +70,7 @@ func getSessionUser(r *http.Request) string {
 // deleteSession removes a session from the DB
 func deleteSession(token string) {
 	db.Exec("DELETE FROM sessions WHERE token = ?", token)
+	notifyRevokedSessions("", token)
 }
 
 // cleanExpiredSessions removes all expired sessions
@@ -135,4 +136,5 @@ func cleanExpiredPlayerTokens() {
 // deleteUserSessions invalidates all sessions for a user (on password change/reset)
 func deleteUserSessions(username string) {
 	db.Exec("DELETE FROM sessions WHERE username = ?", username)
+	notifyRevokedSessions(username, "")
 }

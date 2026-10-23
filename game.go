@@ -51,6 +51,25 @@ type Player struct {
 	ID, Name                                                                 string
 	Teeth, MaxTeeth, Answer                                                  int
 	Alive, Answered, JustLost, JustDied, LostThisGame, Eliminated, Connected bool
+	Spectator                                                                bool
+}
+
+// setSpectator switches a player between playing and watching. Spectators have
+// no teeth and are never alive, so all round logic skips them.
+func (p *Player) setSpectator(on bool, numTeeth int) {
+	p.Spectator = on
+	p.Answer = -1
+	p.Answered, p.JustLost, p.JustDied, p.LostThisGame, p.Eliminated = false, false, false, false, false
+	if on {
+		p.Teeth, p.MaxTeeth, p.Alive = 0, 0, false
+	} else {
+		p.Teeth, p.MaxTeeth, p.Alive = numTeeth, numTeeth, true
+	}
+}
+
+// resetForLobby restores a player's per-game state; spectators stay spectators.
+func (p *Player) resetForLobby(numTeeth int) {
+	p.setSpectator(p.Spectator, numTeeth)
 }
 
 type Question struct {
@@ -154,10 +173,36 @@ func (g *Game) addPlayer(id, name string) bool {
 	}
 	g.Players[id] = &Player{ID: id, Name: name, Teeth: g.Settings.NumTeeth, MaxTeeth: g.Settings.NumTeeth, Alive: true, Answer: -1, Connected: true}
 	g.PlayerOrder = append(g.PlayerOrder, id)
-	if len(g.Players) > 1 && g.Settings.Mode == ModeSingleplayer {
+	if g.countParticipants() > 1 && g.Settings.Mode == ModeSingleplayer {
 		g.Settings.Mode = ModeClassic
 	}
 	return true
+}
+
+// setSpectator toggles spectator mode for a player; only allowed in the lobby.
+func (g *Game) setSpectator(id string, on bool) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	p, ok := g.Players[id]
+	if !ok || g.Phase != PhaseLobby || p.Spectator == on {
+		return false
+	}
+	p.setSpectator(on, g.Settings.NumTeeth)
+	if g.countParticipants() > 1 && g.Settings.Mode == ModeSingleplayer {
+		g.Settings.Mode = ModeClassic
+	}
+	return true
+}
+
+// countParticipants counts players who are not spectating (connected or not).
+func (g *Game) countParticipants() int {
+	n := 0
+	for _, p := range g.Players {
+		if !p.Spectator {
+			n++
+		}
+	}
+	return n
 }
 
 func (g *Game) reconnectPlayerByID(playerID string, conn *websocket.Conn) bool {
@@ -266,13 +311,12 @@ func (g *Game) startGame() error {
 			g.PlayerOrder = no
 			continue
 		}
-		p.Teeth = g.Settings.NumTeeth
-		p.MaxTeeth = g.Settings.NumTeeth
-		p.Alive = true
-		p.LostThisGame = false
-		p.Eliminated = false
-		p.JustLost = false
-		p.JustDied = false
+		p.resetForLobby(g.Settings.NumTeeth)
+	}
+	if g.countParticipants() == 0 {
+		g.Phase = PhaseLobby
+		g.mu.Unlock()
+		return fmt.Errorf("no participants")
 	}
 	g.prefetched = nil
 	g.prefetching = false
@@ -288,7 +332,7 @@ func (g *Game) startGame() error {
 		numQ = 20
 		diff = g.Settings.StartDifficulty
 	}
-	logInfo("system", g.HostUser, "GAME_START", fmt.Sprintf("id=%s mode=%s topic=%s diff=%s players=%d websearch=%v", g.ID, g.Settings.Mode, g.Settings.Topic, diff, len(g.Players), g.Settings.WebSearch))
+	logInfo("system", g.HostUser, "GAME_START", fmt.Sprintf("id=%s mode=%s topic=%s diff=%s players=%d websearch=%v", g.ID, g.Settings.Mode, g.Settings.Topic, diff, g.countParticipants(), g.Settings.WebSearch))
 	res, err := generateQuestions(g.Settings.Topic, diff, numQ, g.Settings.NumOptions, nil, g.Settings.WebSearch)
 	if err != nil {
 		g.setError(err.Error())
@@ -301,7 +345,7 @@ func (g *Game) startGame() error {
 	go recordGameStart(g.currentHistoryID, g.HostUser, g.Settings.LobbyName,
 		string(g.Settings.Mode), g.Settings.Topic, g.Settings.Difficulty,
 		g.Settings.StartDifficulty, g.Settings.NumTeeth, g.Settings.TimePerQ,
-		g.Settings.NumOptions, len(g.Players))
+		g.Settings.NumOptions, g.countParticipants())
 	if g.Settings.ShowTutorial {
 		g.Phase = PhaseTutorial
 		g.mu.Unlock()
@@ -626,6 +670,9 @@ func (g *Game) getWinners() []map[string]string {
 	}
 	var all []c
 	for _, p := range g.Players {
+		if p.Spectator {
+			continue
+		}
 		all = append(all, c{p.ID, p.Name, p.Teeth})
 	}
 	sort.Slice(all, func(i, j int) bool { return all[i].teeth > all[j].teeth })
@@ -647,7 +694,7 @@ func playerJSON(p *Player) map[string]interface{} {
 		"id": p.ID, "name": p.Name, "teeth": p.Teeth, "maxTeeth": p.MaxTeeth,
 		"alive": p.Alive, "answer": p.Answer, "answered": p.Answered,
 		"justLost": p.JustLost, "justDied": p.JustDied, "lostThisGame": p.LostThisGame,
-		"eliminated": p.Eliminated, "connected": p.Connected,
+		"eliminated": p.Eliminated, "connected": p.Connected, "spectator": p.Spectator,
 	}
 }
 

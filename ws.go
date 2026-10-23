@@ -93,7 +93,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			continue
 
 		case "create_game":
-			if authUser == "" {
+			// Re-check: the session may have been revoked since the socket opened
+			if authUser = getSessionUser(r); authUser == "" {
 				wsError(conn, "Nicht eingeloggt")
 				continue
 			}
@@ -222,14 +223,13 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 					g.Settings.NumTeeth = s.NumTeeth
 					if g.Phase == PhaseLobby {
 						for _, p := range g.Players {
-							p.Teeth = s.NumTeeth
-							p.MaxTeeth = s.NumTeeth
+							p.resetForLobby(s.NumTeeth)
 						}
 					}
 				}
 				if s.Mode != "" {
 					m := GameMode(s.Mode)
-					if m == ModeSingleplayer && len(g.Players) > 1 {
+					if m == ModeSingleplayer && g.countParticipants() > 1 {
 						m = ModeClassic
 					}
 					if m == ModeClassic || m == ModeElimination || m == ModeBattleRoyale || m == ModeSingleplayer {
@@ -330,7 +330,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			if isRandom {
 				var candidates []string
 				for _, pid := range g.PlayerOrder {
-					if pl, ok2 := g.Players[pid]; ok2 && pl.Connected {
+					if pl, ok2 := g.Players[pid]; ok2 && pl.Connected && !pl.Spectator {
 						candidates = append(candidates, pid)
 					}
 				}
@@ -366,6 +366,21 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 			g.broadcastState()
+
+		case "set_spectator":
+			gamesMu.Lock()
+			g, ok := games[curInvite]
+			gamesMu.Unlock()
+			if !ok {
+				continue
+			}
+			var p struct {
+				Spectator bool `json:"spectator"`
+			}
+			json.Unmarshal(msg.Payload, &p)
+			if g.setSpectator(playerID, p.Spectator) {
+				g.broadcastState()
+			}
 
 		case "start_game":
 			gamesMu.Lock()
@@ -437,15 +452,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			g.ErrorMsg = ""
 			g.DelegatedTo = ""
 			for _, p := range g.Players {
-				p.Teeth = g.Settings.NumTeeth
-				p.MaxTeeth = g.Settings.NumTeeth
-				p.Alive = true
-				p.Answer = -1
-				p.Answered = false
-				p.JustLost = false
-				p.JustDied = false
-				p.LostThisGame = false
-				p.Eliminated = false
+				p.resetForLobby(g.Settings.NumTeeth)
 			}
 			g.mu.Unlock()
 			g.broadcastState()
@@ -469,15 +476,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				g.ErrorMsg = ""
 				g.DelegatedTo = ""
 				for _, p := range g.Players {
-					p.Teeth = g.Settings.NumTeeth
-					p.MaxTeeth = g.Settings.NumTeeth
-					p.Alive = true
-					p.Answer = -1
-					p.Answered = false
-					p.JustLost = false
-					p.JustDied = false
-					p.LostThisGame = false
-					p.Eliminated = false
+					p.resetForLobby(g.Settings.NumTeeth)
 				}
 			}
 			g.mu.Unlock()

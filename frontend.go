@@ -36,7 +36,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .cc{max-width:520px;margin:20px auto}.sp{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px}.spt{font-size:.8rem;color:var(--text2);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px}.sg{display:grid;grid-template-columns:1fr 1fr;gap:12px}.sg .ig{margin-bottom:0}.sg input,.sg select{padding:9px 11px;font-size:.9rem}
 .lobby-container{max-width:800px;margin:16px auto}.gcd{text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:18px}.gcl{font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:3px;margin-bottom:4px}.il{font-family:'Space Mono',monospace;font-size:.7rem;color:var(--gold);word-break:break-all;cursor:pointer;padding:8px 12px;background:var(--bg2);border-radius:6px;margin-top:8px;display:inline-block}.il:hover{text-decoration:underline}
 .pst{font-size:.8rem;color:var(--text2);text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}.pg{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}
-.pc{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;position:relative;transition:all .3s}.pc.eliminated{opacity:.45;border-color:var(--wrong)}.pc.disconnected{opacity:.35}.pc.is-me{border-color:var(--accent);border-width:2px}.pc.q-answered{border-color:var(--correct);background:rgba(0,230,138,.05)}.pn{font-weight:600;font-size:.9rem;margin-bottom:3px}.ps{font-size:.6rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}.ps.host{color:var(--gold)}.ps.elim{color:var(--wrong)}.ps.delegate{color:var(--accent2)}.ans-progress{font-size:.75rem;color:var(--text2);margin-bottom:10px;text-align:center}
+.pc{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;position:relative;transition:all .3s}.pc.eliminated{opacity:.45;border-color:var(--wrong)}.pc.disconnected{opacity:.35}.pc.is-me{border-color:var(--accent);border-width:2px}.pc.q-answered{border-color:var(--correct);background:rgba(0,230,138,.05)}.pn{font-weight:600;font-size:.9rem;margin-bottom:3px}.ps{font-size:.6rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}.ps.host{color:var(--gold)}.ps.elim{color:var(--wrong)}.ps.delegate{color:var(--accent2)}.ps.spec{color:var(--text2)}.pc.spectating{border-style:dashed;opacity:.7}.spec-icon{font-size:1.6rem;padding:14px 0;opacity:.6}.ans-progress{font-size:.75rem;color:var(--text2);margin-bottom:10px;text-align:center}
 .teeth-wrap{position:relative;padding:8px 0;min-height:60px}.teeth-rows{display:flex;flex-direction:column;align-items:center;gap:2px}.tooth-row{display:flex;justify-content:center;gap:2px}.tooth{width:14px;height:20px;transition:all .4s cubic-bezier(.68,-.55,.265,1.55)}.tooth.upper{border-radius:3px 3px 7px 7px}.tooth.lower{border-radius:7px 7px 3px 3px}.tooth.alive{background:linear-gradient(180deg,var(--tooth-white) 0%,#d8d4c8 100%);box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.4)}.tooth.dead{background:var(--tooth-dead);box-shadow:inset 0 2px 4px rgba(0,0,0,.5)}.tooth.upper.just-lost{animation:tf-down .7s ease-in forwards}.tooth.lower.just-lost{animation:tf-up .7s ease-in forwards}
 @keyframes tf-down{0%{transform:translateY(0) rotate(0);opacity:1}40%{transform:translateY(12px) rotate(-10deg);opacity:.9}100%{transform:translateY(20px) rotate(15deg);opacity:.5;background:var(--tooth-dead)}}
 @keyframes tf-up{0%{transform:translateY(0) rotate(0);opacity:1}40%{transform:translateY(-12px) rotate(10deg);opacity:.9}100%{transform:translateY(-20px) rotate(-15deg);opacity:.5;background:var(--tooth-dead)}}
@@ -208,6 +208,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div id="lobby-settings"></div>
 <div class="pst" id="players-count">Spieler*innen (0)</div>
 <div class="pg" id="lobby-players"></div>
+<div id="spectate-toggle" style="text-align:center;margin-bottom:12px"></div>
 <div id="start-btn-container" style="display:none;text-align:center"><button class="btn btn-p" onclick="startGame()" style="max-width:280px">Spiel starten</button></div></div></div>
 
 <div id="screen-loading" class="screen"><div class="loading-container"><div class="tooth-mount"></div><div class="loading-text">Fragen werden generiert...</div></div></div>
@@ -364,13 +365,13 @@ let globalSounds={},bgMuted=false,bgStarted=false,tutorialHtml='';
 const DL={leicht:'Leicht',mittel:'Mittel',schwer:'Schwer',extrem:'Extrem'};
 const ML={classic:'Klassisch',elimination:'Elimination',kfo_battle_royale:'KFO Battle Royale',kfo_singleplayer:'KFO Singleplayer'};
 const openaiModels=['gpt-5.4','gpt-5.4-mini','gpt-5.4-nano','gpt-5','gpt-4o','gpt-4o-mini','gpt-4.1'];
-const anthropicModels=['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'];
+const anthropicModels=['claude-fable-5-1','claude-fable-5','claude-opus-5-5','claude-opus-5','claude-opus-4-8','claude-opus-4-7','claude-opus-4-6','claude-sonnet-5-5','claude-sonnet-5','claude-sonnet-4-6','claude-haiku-4-5'];
 const soundDefs=[{key:'intro_sound',label:'Intro-Sound',id:'file-intro'},{key:'background_sound',label:'Background-Song',id:'file-bg'},{key:'wrong_sound',label:'Falsch-Sound',id:'file-wrong'},{key:'answer_sound',label:'Antwort-Sound',id:'file-answer'},{key:'hurry_sound',label:'Zeit-läuft-ab-Sound',id:'file-hurry'},{key:'timeout_sound',label:'Zeit-abgelaufen-Sound',id:'file-timeout'},{key:'question_sound',label:'Nächste-Frage-Sound',id:'file-question'},{key:'allwrong_sound',label:'Alle-falsch-Sound',id:'file-allwrong'},{key:'allcorrect_sound',label:'Alle-richtig-Sound',id:'file-allcorrect'},{key:'generating_sound',label:'Generierungs-Musik',id:'file-generating'}];
 const volDefs=[{id:'vol-intro',key:'vol_intro',label:'Intro',def:'0.6'},{id:'vol-bg',key:'vol_background',label:'Hintergrund',def:'0.2'},{id:'vol-wrong',key:'vol_wrong',label:'Falsch',def:'0.6'},{id:'vol-answer',key:'vol_answer',label:'Antwort',def:'0.6'},{id:'vol-hurry',key:'vol_hurry',label:'Zeit läuft ab',def:'0.5'},{id:'vol-timeout',key:'vol_timeout',label:'Zeit abgelaufen',def:'0.6'},{id:'vol-question',key:'vol_question',label:'Nächste Frage',def:'0.5'},{id:'vol-allwrong',key:'vol_allwrong',label:'Alle falsch',def:'0.6'},{id:'vol-allcorrect',key:'vol_allcorrect',label:'Alle richtig',def:'0.6'},{id:'vol-generating',key:'vol_generating',label:'Generierung',def:'0.4'}];
 const SOUND_MAP={intro_sound:'introSound',background_sound:'backgroundSound',wrong_sound:'wrongSound',answer_sound:'answerSound',hurry_sound:'hurrySound',timeout_sound:'timeoutSound',question_sound:'questionSound',allwrong_sound:'allwrongSound',allcorrect_sound:'allcorrectSound',generating_sound:'generatingSound'};
 function mountToothSpinners(){if(window.Tooth3D)Tooth3D.mountAll()}
 function getCookie(name){const m=document.cookie.match('(^|;)\\s*'+name+'\\s*=\\s*([^;]+)');return m?m[2]:''}
-async function apiFetch(url,opts={}){const method=opts.method||'GET';const headers=opts.headers||{};if(method!=='GET'&&!opts.nocsrf){headers['X-CSRF-Token']=getCookie('heinen_csrf')}return fetch(url,{...opts,headers})}
+async function apiFetch(url,opts={}){const method=opts.method||'GET';const headers=opts.headers||{};if(method!=='GET'&&!opts.nocsrf){headers['X-CSRF-Token']=getCookie('heinen_csrf')}const r=await fetch(url,{...opts,headers});if(r.status===401&&currentUser)checkSession();return r}
 
 (async function(){
   mountToothSpinners();
@@ -395,7 +396,21 @@ function markdownToHtml(md){md=md.replace(/\\\*/g,'\u2605STAR\u2605');md=md.repl
 
 function updateNav(){const n=document.getElementById('nav-bar');const hpb=document.getElementById('home-panel-btn');const hlb=document.getElementById('home-login-btn');
   if(currentUser){n.innerHTML='<span style="color:var(--text2);font-size:.75rem;align-self:center">'+esc(currentUser.username)+'</span><button class="nav-btn" onclick="doLogout()">Abmelden</button>';if(hpb)hpb.style.display='inline-block';if(hlb)hlb.style.display='none'}
-  else{n.innerHTML='';if(hpb)hpb.style.display='none';if(hlb)hlb.style.display='inline-block'}}
+  else{n.innerHTML='';if(hpb)hpb.style.display='none';if(hlb)hlb.style.display='inline-block'}
+  syncSessionStream()}
+// Live session state: the server pushes "logout" as soon as this session is revoked
+let sessES=null;
+function syncSessionStream(){
+  if(currentUser&&!sessES){sessES=new EventSource('/api/session-events');sessES.addEventListener('logout',()=>forceLoggedOut());
+    sessES.onerror=()=>{if(sessES&&sessES.readyState===2){sessES=null;checkSession()}}}
+  else if(!currentUser&&sessES){sessES.close();sessES=null}}
+async function checkSession(){if(!currentUser)return;try{const r=await fetch('/api/me');if(r.status===401)forceLoggedOut();else if(r.ok&&!sessES)syncSessionStream()}catch(e){}}
+function forceLoggedOut(){if(!currentUser)return;currentUser=null;updateNav();
+  const qe=document.getElementById('screen-questions');if(qe&&qe.style.display==='block')hideQuestions();
+  const act=document.querySelector('.screen.active'),name=act?act.id.replace('screen-',''):'';
+  if(['dashboard','passkeys','pw','admin','create'].includes(name))showScreen('login');
+  showToast('Du wurdest abgemeldet \u2013 bitte erneut anmelden.',1)}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkSession()});
 function goHome(){hideQuestions();if(gameState&&['question','results','intro','loading','refill','tutorial'].includes(gameState.phase)){if(!confirm('Spiel wirklich verlassen?'))return}
   gameState=null;stopBg();stopGenSound();if(ws){try{ws.close()}catch(e){}}ws=null;myId='';inviteCode='';sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');
   history.replaceState(null,'','/');showScreen('home');updateNav();loadLobbies()}
@@ -408,13 +423,13 @@ function toggleLobbyPw(){document.getElementById('lobby-pw-group').style.display
 
 async function doLogin(){const u=document.getElementById('login-user').value.trim(),p=document.getElementById('login-pass').value;if(!u||!p){showToast('Felder ausfüllen',1);return}
   const r=await apiFetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});const d=await r.json();if(!r.ok){showToast(d.error||'Fehler',1);return}currentUser=d;showScreen('dashboard');updateNav()}
-async function doLogout(){await apiFetch('/api/logout',{method:'POST'});currentUser=null;showScreen('home');updateNav()}
+async function doLogout(){currentUser=null;updateNav();await apiFetch('/api/logout',{method:'POST'});showScreen('home')}
 async function changePw(){const o=document.getElementById('pw-old').value,n=document.getElementById('pw-new').value,n2=document.getElementById('pw-new2').value;if(!o||!n){showToast('Felder ausfüllen',1);return}if(n!==n2){showToast('Nicht überein',1);return}
-  const r=await apiFetch('/api/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({OldPassword:o,NewPassword:n})});const d=await r.json();if(d.error){showToast(d.error,1);return}showToast('Geändert',0);showScreen('dashboard')}
+  const r=await apiFetch('/api/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({OldPassword:o,NewPassword:n})});const d=await r.json();if(d.error){showToast(d.error,1);return}currentUser=null;updateNav();showScreen('login');showToast('Passwort geändert \u2013 bitte neu anmelden',0)}
 
 // Admin
 async function loadAdmin(){
-  const ar=await fetch('/api/ai-config');const ac=await ar.json();document.getElementById('ai-provider').value=ac.provider||'openai';onProviderChange();document.getElementById('ai-model').value=ac.model||'';
+  const ar=await fetch('/api/ai-config');const ac=await ar.json();document.getElementById('ai-provider').value=ac.provider||'openai';onProviderChange();const ms=document.getElementById('ai-model');if(ac.model&&![...ms.options].some(o=>o.value===ac.model))ms.insertAdjacentHTML('beforeend','<option value="'+esc(ac.model).replace(/"/g,'&quot;')+'">'+esc(ac.model)+'</option>');ms.value=ac.model||'';
   document.getElementById('ai-openai-key').value='';document.getElementById('ai-openai-key').placeholder=ac.openaiKey||'sk-...';document.getElementById('ai-anthropic-key').value='';document.getElementById('ai-anthropic-key').placeholder=ac.anthropicKey||'sk-ant-...';document.getElementById('ai-intro-delay').value=ac.introDelay||'4';document.getElementById('ai-status').textContent='';
   // Volumes
   document.getElementById('vol-sliders').innerHTML=volDefs.map(v=>{const val=ac[v.key]||v.def;return '<div class="sound-row"><span class="sound-label">'+v.label+'</span><input type="range" id="'+v.id+'" min="0" max="1" step="0.05" value="'+val+'" style="flex:1" oninput="document.getElementById(\''+v.id+'-val\').textContent=parseFloat(this.value).toFixed(2)"/><span id="'+v.id+'-val" style="font-size:.75rem;color:var(--text2);width:35px;text-align:right">'+val+'</span><button class="btn btn-sm btn-s" onclick="previewVol(\''+v.key.replace('vol_','')+'_sound\',\''+v.id+'\')">&#9654;</button></div>'}).join('');
@@ -1289,6 +1304,9 @@ function sendLS(){
   const ac=document.getElementById('l-allowchange');if(ac)s.AllowAnswerChange=ac.checked;}
   send('update_settings',s)}
 
+function amISpectator(){if(!gameState)return false;const me=gameState.players.find(p=>p.id===myId);return !!(me&&me.spectator)}
+function toggleSpectator(){send('set_spectator',{spectator:!amISpectator()})}
+function spectatorCard(p,extraCls,showMe){return '<div class="pc spectating'+(extraCls||'')+'"><div class="pn">'+esc(p.name)+(showMe&&p.id===myId?' (Du)':'')+'</div><div class="ps spec">&#128065; Zuschauer*in</div><div class="spec-icon">&#128064;</div></div>'}
 function amIAlive(){if(!gameState)return true;const me=gameState.players.find(p=>p.id===myId);return me?me.alive:true}
 
 function delegateSettings(pid){send('delegate_settings',{playerId:pid})}
@@ -1350,7 +1368,7 @@ function renderLobby(isHost){
   const invBox=document.querySelector('.gcd');if(invBox)invBox.style.display=isHost?'':'none';
   if(isHost){const link=location.origin+'/?join='+inviteCode;document.getElementById('invite-link').textContent=link;
   const qrEl=document.getElementById('qr-code');qrEl.innerHTML='';try{new QRCode(qrEl,{text:link,width:180,height:180,colorDark:'#e4e4ef',colorLight:'#0a0a0f'})}catch(e){}}
-  const s=gameState.settings,players=gameState.players||[],spLocked=players.filter(p=>p.connected).length>1;
+  const s=gameState.settings,players=gameState.players||[],spLocked=players.filter(p=>p.connected&&!p.spectator).length>1;
   const delegatedTo=gameState.delegatedTo||'';
   const delegatedPlayer=delegatedTo?players.find(p=>p.id===delegatedTo):null;
   const amIDelegated=delegatedTo===myId&&!isHost;
@@ -1416,17 +1434,21 @@ function renderLobby(isHost){
       +'<div class="sv-item"><span class="sv-label">Zeit</span><span class="sv-value">'+s.timePerQuestion+' Sek.</span></div>'
       +'<div class="sv-item"><span class="sv-label">Z\u00e4hne</span><span class="sv-value">'+s.numTeeth+'</span></div>'
       +'</div></div>'}
-  document.getElementById('players-count').textContent='Spieler*innen ('+players.length+')';
+  const nSpec=players.filter(p=>p.spectator).length,nPlay=players.length-nSpec;
+  document.getElementById('players-count').textContent='Spieler*innen ('+nPlay+')'+(nSpec?' \u2022 Zuschauer*innen ('+nSpec+')':'');
   document.getElementById('lobby-players').innerHTML=players.map(p=>{
     const isH=p.id===gameState.hostId,isMe=p.id===myId,isD=delegatedTo&&p.id===delegatedTo;
-    return '<div class="pc'+(p.connected?'':' disconnected')+(isMe?' is-me':'')+'">'
+    return '<div class="pc'+(p.connected?'':' disconnected')+(isMe?' is-me':'')+(p.spectator?' spectating':'')+'">'
       +(isHost&&!isH?'<button class="kick-btn" onclick="kickPlayer(\''+p.id+'\')" title="Entfernen">&#10005;</button><button class="kick-btn" style="top:5px;right:25px" onclick="transferHost(\''+p.id+'\')" title="Host \u00fcbertragen">&#128081;</button>':'')
       +'<div class="pn">'+esc(p.name)+(isMe?' (Du)':'')+'</div>'
       +'<div class="ps'+(isH?' host':isD?' delegate':'')+'">'+
-        (isH?'Host':isD?'W\u00e4hlt Thema':(p.connected?'Bereit':'Getrennt'))
-      +'</div>'+renderTeeth(p,false,false,false)+'</div>';
+        (isH?'Host':isD?'W\u00e4hlt Thema':(p.connected?'Bereit':'Getrennt'))+(p.spectator?' \u2022 &#128065; Zuschauer*in':'')
+      +'</div>'+(p.spectator?'<div class="spec-icon">&#128064;</div>':renderTeeth(p,false,false,false))+'</div>';
   }).join('');
-  document.getElementById('start-btn-container').style.display=(isHost&&players.length>=1)?'block':'none'}
+  const meSpec=amISpectator();
+  document.getElementById('spectate-toggle').innerHTML='<button class="btn btn-s btn-sm" onclick="toggleSpectator()" style="max-width:280px">'+(meSpec?'&#127918; Doch mitspielen':'&#128065; Nur zuschauen')+'</button>'
+    +(isHost&&nPlay===0?'<div style="color:var(--text2);font-size:.8rem;margin-top:8px">Mindestens eine Person muss mitspielen.</div>':'');
+  document.getElementById('start-btn-container').style.display=(isHost&&nPlay>=1)?'block':'none'}
 
 function renderTeeth(p,anim,showLost,showDead){let upper=[],lower=[];for(let i=0;i<p.maxTeeth;i++){const alive=i<p.teeth,lost=anim&&p.justLost&&i===p.teeth;const row=i%2===0?'upper':'lower';const cls='tooth '+row+(alive?' alive':' dead')+(lost?' just-lost':'');if(i%2===0)upper.push('<div class="'+cls+'"></div>');else lower.push('<div class="'+cls+'"></div>')}
   let h='<div class="teeth-wrap"><div class="teeth-rows"><div class="tooth-row">'+upper.join('')+'</div><div class="tooth-row">'+lower.join('')+'</div></div>';
@@ -1439,14 +1461,14 @@ function renderOptions(){const q=gameState.question;if(!q)return;const L=['A','B
 function renderResults(){const q=gameState.question,r=gameState.results;if(!q||!r)return;document.getElementById('q-counter').textContent=qCounterText(q);document.getElementById('q-text').textContent=q.text;const L=['A','B','C','D','E','F'];
   document.getElementById('q-options').innerHTML=q.options.map((o,i)=>{let c='ob dis';if(i===r.correctAnswer)c+=' correct';else if(selectedAnswer===i)c+=' wrong';return '<button class="'+c+'"><span class="ol">'+L[i]+'</span> '+esc(o)+'</button>'}).join('');
   const my=r.playerResults[myId],info=document.getElementById('results-info');info.style.display='block';
-  if(my==='correct')info.innerHTML='<span style="color:var(--correct)">Richtige Antwort!</span>';else if(my==='wrong')info.innerHTML='<span style="color:var(--wrong)">Falsche Antwort – Zahn verloren!</span>';else if(my==='timeout'){info.innerHTML='<span style="color:var(--wrong)">Zeit abgelaufen – Zahn verloren!</span>'}else if(!amIAlive())info.innerHTML='<span style="color:var(--text2)">Du bist ausgeschieden.</span>';document.getElementById('q-timer').textContent='\u2014'}
-function renderGamePlayers(isHost){const players=gameState.players||[],ph=gameState.phase;document.getElementById('game-players-title').textContent='Spieler*innen ('+players.filter(p=>p.alive).length+' aktiv)';
+  if(my==='correct')info.innerHTML='<span style="color:var(--correct)">Richtige Antwort!</span>';else if(my==='wrong')info.innerHTML='<span style="color:var(--wrong)">Falsche Antwort – Zahn verloren!</span>';else if(my==='timeout'){info.innerHTML='<span style="color:var(--wrong)">Zeit abgelaufen – Zahn verloren!</span>'}else if(amISpectator())info.innerHTML='<span style="color:var(--text2)">&#128065; Du schaust zu.</span>';else if(!amIAlive())info.innerHTML='<span style="color:var(--text2)">Du bist ausgeschieden.</span>';document.getElementById('q-timer').textContent='\u2014'}
+function renderGamePlayers(isHost){const players=gameState.players||[],ph=gameState.phase;const nSpecG=players.filter(p=>p.spectator).length;document.getElementById('game-players-title').textContent='Spieler*innen ('+players.filter(p=>p.alive).length+' aktiv)'+(nSpecG?' \u2022 '+nSpecG+' Zuschauer*innen':'');
   let progressHtml='';
   if(ph==='question'){const active=players.filter(p=>p.alive&&p.connected);const answeredCount=active.filter(p=>p.answered).length;const total=active.length;
     const pct=total>0?Math.round(answeredCount/total*100):0;
     progressHtml='<div class="ans-progress" style="position:sticky;bottom:0;background:linear-gradient(to bottom,transparent,var(--bg) 40%);padding:16px 0 2px;margin-top:10px;margin-bottom:0">'+answeredCount+'\u00a0von\u00a0'+total+' haben geantwortet'
       +'<div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:var(--correct);border-radius:2px;transition:width .4s"></div></div></div>'}
-  document.getElementById('game-players').innerHTML=players.map(p=>{let ec='';if(!p.alive)ec=' eliminated';if(!p.connected)ec+=' disconnected';if(p.id===myId)ec+=' is-me';
+  document.getElementById('game-players').innerHTML=players.map(p=>{if(p.spectator)return spectatorCard(p,(p.connected?'':' disconnected')+(p.id===myId?' is-me':''),true);let ec='';if(!p.alive)ec=' eliminated';if(!p.connected)ec+=' disconnected';if(p.id===myId)ec+=' is-me';
     if(ph==='question'&&p.alive&&p.connected&&p.answered)ec+=' q-answered';
     let status='';
     if(!p.alive)status='<span style="color:var(--wrong)">Ausgeschieden</span>';
@@ -1461,9 +1483,9 @@ function renderEnd(isHost){const c=document.getElementById('end-content'),player
   else if(winners.length===1)c.innerHTML='<div style="font-size:2.5rem;margin-bottom:8px">&#127942;</div><div class="winner-display">'+esc(winners[0].name)+' gewinnt!</div><div class="end-sub">'+(isEndless?'Letzte*r mit Zähnen!':'Die meisten Zähne behalten!')+'</div>';
   else if(winners.length>1)c.innerHTML='<div style="font-size:2.5rem;margin-bottom:8px">&#127942;</div><div class="winner-display">Gleichstand!</div><div class="end-sub">Gewinner*innen: '+winners.map(w=>esc(w.name)).join(', ')+'</div>';
   else c.innerHTML='<div style="font-size:2.5rem;margin-bottom:8px">&#128128;</div><div class="no-winner">Alle ausgeheint!</div><div class="end-sub">Keine*r hat gewonnen.</div>';
-  const wIds=new Set(winners.map(w=>w.id));const sorted=[...players].sort((a,b)=>b.teeth-a.teeth);
+  const wIds=new Set(winners.map(w=>w.id));const sorted=players.filter(p=>!p.spectator).sort((a,b)=>b.teeth-a.teeth),specs=players.filter(p=>p.spectator);
   document.getElementById('end-players').innerHTML='<div class="pst">Endergebnis</div><div class="pg">'+sorted.map(p=>{const w=wIds.has(p.id);return '<div class="pc'+(!p.alive?' eliminated':'')+'" style="'+(w?'border-color:var(--gold);box-shadow:0 0 16px rgba(255,215,0,.2)':'')+'"><div class="pn">'+(w?'&#128081; ':'')+esc(p.name)+' <span style="color:var(--text2);font-size:.75rem">('+p.teeth+'/'+p.maxTeeth+')</span></div><div class="ps'+(w?' host':(!p.alive?' elim':''))+'">'+
-    (w?'Gewinner*in!':(!p.alive?'Ausgeschieden':'Überlebt'))+'</div>'+renderTeeth(p,false,false,false)+'</div>'}).join('')+'</div>';
+    (w?'Gewinner*in!':(!p.alive?'Ausgeschieden':'Überlebt'))+'</div>'+renderTeeth(p,false,false,false)+'</div>'}).join('')+specs.map(p=>spectatorCard(p,'',true)).join('')+'</div>';
   document.getElementById('end-actions').innerHTML=isHost?'<button class="btn btn-p" onclick="playAgain()" style="max-width:280px;margin:0 auto">Nochmal spielen</button>':'<div style="color:var(--text2)">Warte auf den*die Host...</div>';
   sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name')}
 

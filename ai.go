@@ -254,25 +254,45 @@ func callOpenAI(key, model, prompt string, webSearch bool) (string, error) {
 	return r.Choices[0].Message.Content, nil
 }
 
+// anthropicHasFallback reports whether a model supports server-side refusal fallbacks.
+func anthropicHasFallback(model string) bool {
+	return strings.HasPrefix(model, "claude-fable-5") || strings.HasPrefix(model, "claude-opus-5") || strings.HasPrefix(model, "claude-sonnet-5-5")
+}
+
 func callAnthropic(key, model, prompt string) (string, error) {
-	body, _ := json.Marshal(map[string]interface{}{"model": model, "max_tokens": 4096, "messages": []map[string]interface{}{{"role": "user", "content": prompt}}})
+	// 16000 leaves room for the thinking that newer models do by default
+	payload := map[string]interface{}{"model": model, "max_tokens": 16000, "messages": []map[string]interface{}{{"role": "user", "content": prompt}}}
+	if anthropicHasFallback(model) {
+		payload["fallbacks"] = "default"
+	}
+	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", key)
 	req.Header.Set("anthropic-version", "2023-06-01")
-	resp, err := (&http.Client{Timeout: 90 * time.Second}).Do(req)
+	if anthropicHasFallback(model) {
+		req.Header.Set("anthropic-beta", "server-side-fallback-2026-07-01")
+	}
+	resp, err := (&http.Client{Timeout: 240 * time.Second}).Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	var r struct {
-		Content []struct{ Type, Text string }
-		Error   *struct{ Message string }
+		Content    []struct{ Type, Text string }
+		Error      *struct{ Message string }
+		StopReason string `json:"stop_reason"`
 	}
 	json.Unmarshal(rb, &r)
 	if r.Error != nil {
 		return "", fmt.Errorf("%s", r.Error.Message)
+	}
+	switch r.StopReason {
+	case "refusal":
+		return "", fmt.Errorf("Anfrage vom Modell abgelehnt (refusal)")
+	case "max_tokens":
+		return "", fmt.Errorf("Antwort abgeschnitten (max_tokens erreicht)")
 	}
 	for _, c := range r.Content {
 		if c.Type == "text" {

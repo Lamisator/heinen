@@ -75,6 +75,7 @@ func main() {
 	mux.HandleFunc("/api/login", handleLogin)
 	mux.HandleFunc("/api/logout", handleLogout)
 	mux.HandleFunc("/api/me", handleMe)
+	mux.HandleFunc("/api/session-events", handleSessionEvents)
 	mux.HandleFunc("/api/change-password", handleChangePassword)
 	mux.HandleFunc("/api/users", handleUsers)
 	mux.HandleFunc("/api/ai-config", handleAIConfig)

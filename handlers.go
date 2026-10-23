@@ -215,6 +215,7 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		db.Exec("DELETE FROM users WHERE id = ?", req.ID)
+		deleteUserSessions(tu)
 		logInfo(ip, u, "USER_DELETE", "deleted="+tu)
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	case "PUT":
@@ -394,6 +395,8 @@ func handleTestAI(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": "Kein Key"})
 		return
 	}
+	// Thinking models can take longer than the server-wide 10 s write timeout
+	http.NewResponseController(w).SetWriteDeadline(time.Now().Add(250 * time.Second))
 	logInfo(getIP(r), u, "AI_TEST", fmt.Sprintf("provider=%s", req.Provider))
 	ok, msg := testAIKey(req.Provider, req.Key, req.Model)
 	json.NewEncoder(w).Encode(map[string]interface{}{"ok": ok, "message": msg})
@@ -1092,9 +1095,9 @@ func handleAdminGenerateQuestions(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 		return
 	}
-	// AI generation can take up to 2 minutes – extend write deadline
+	// AI generation can take up to 4 minutes (thinking models) – extend write deadline
 	rc := http.NewResponseController(w)
-	rc.SetWriteDeadline(time.Now().Add(150 * time.Second))
+	rc.SetWriteDeadline(time.Now().Add(250 * time.Second))
 
 	var req struct {
 		Topic      string `json:"topic"`
