@@ -67,6 +67,10 @@ REGELN: Konkrete Fragen/Antworten, KEINE Platzhalter. Antwort NICHT trivial able
 NUR JSON-Array: [{"text":"Frage?","options":["A","B","C","D"],"correct":0}]`, count, topic, nO, dt, excl)
 }
 
+// maxGenerateRounds bounds how often generateQuestions asks the AI again when
+// the duplicate filter leaves fewer questions than requested.
+const maxGenerateRounds = 3
+
 func generateQuestions(topic, diff string, count, nO int, prev []string, webSearch bool) (generateResult, error) {
 	prov := getSetting("ai_provider")
 	model := getSetting("ai_model")
@@ -81,26 +85,88 @@ func generateQuestions(topic, diff string, count, nO int, prev []string, webSear
 		logWarn("system", "system", "AI_NO_KEY", "no API key configured")
 		return generateResult{}, fmt.Errorf("Kein API-Schlüssel im Admin-Panel konfiguriert. Bitte an den*die Administrator*in wenden.")
 	}
-	rc := count + 5
-	if rc > 50 {
-		rc = 50
-	}
-	prompt := buildPrompt(topic, diff, rc, nO, prev)
 	effectiveModel := model
 	if webSearch && prov == "openai" {
 		effectiveModel = webSearchModelFor(model)
 	}
-	logInfo("system", "system", "AI_CALL", fmt.Sprintf("provider=%s model=%s diff=%s count=%d web_search=%v", prov, effectiveModel, diff, rc, webSearch))
+	// Without an explicit exclusion list (game start), tell the AI about the
+	// most recent questions for this topic so it doesn't repeat the classics.
+	if len(prev) == 0 {
+		prev, _ = recentQTextsForTopicDiff(topic, diff, 40)
+	}
+
+	dedupThreshold := 0.85
+	if ts := getSetting("dedup_similarity_threshold"); ts != "" {
+		if v, _ := strconv.ParseFloat(ts, 64); v > 0 && v <= 1 {
+			dedupThreshold = v
+		}
+	}
+	existing, _ := loadPreparedForTopicDiff(topic, diff, 500)
+
+	var result generateResult
+	qs := make([]Question, 0, count)
+	var lastErr error
+	for round := 1; round <= maxGenerateRounds && len(qs) < count; round++ {
+		rc := count - len(qs) + 5
+		if rc > 50 {
+			rc = 50
+		}
+		batch, err := requestQuestions(prov, key, effectiveModel, topic, diff, rc, nO, prev, webSearch)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		// Filter against the DB first, then truncate, so the extra questions
+		// can replace the duplicates.
+		if len(existing) > 0 {
+			var filtered int
+			batch, filtered = filterNewQuestions(batch, existing, dedupThreshold)
+			if filtered > 0 {
+				logInfo("system", "system", "DEDUP_FILTER",
+					fmt.Sprintf("topic=%s diff=%s round=%d removed=%d kept=%d", topic, diff, round, filtered, len(batch)))
+			}
+			result.FilteredCount += filtered
+		}
+		for _, q := range batch {
+			if len(qs) >= count {
+				break
+			}
+			qs = append(qs, shuffleOpts(q))
+			prev = append(prev, q.Text)
+			norm := normalizeQText(q.Text)
+			existing = append(existing, preparedQuestion{rec: questionRecord{Text: q.Text}, norm: norm, toks: tokenizeText(norm)})
+		}
+	}
+	if len(qs) == 0 {
+		if lastErr == nil {
+			lastErr = fmt.Errorf("KI lieferte nur bereits bekannte Fragen. Bitte erneut versuchen oder ein anderes Thema wählen.")
+		}
+		return generateResult{}, lastErr
+	}
+	if len(qs) < count {
+		logWarn("system", "system", "AI_SHORT", fmt.Sprintf("topic=%s diff=%s wanted=%d got=%d", topic, diff, count, len(qs)))
+	}
+
+	go saveQuestionsBulk(qs, diff, topic, prov, model, nO)
+	result.Questions = qs
+	return result, nil
+}
+
+// requestQuestions does one AI call and returns the parsed, non-placeholder
+// questions (options not yet shuffled).
+func requestQuestions(prov, key, model, topic, diff string, rc, nO int, prev []string, webSearch bool) ([]Question, error) {
+	prompt := buildPrompt(topic, diff, rc, nO, prev)
+	logInfo("system", "system", "AI_CALL", fmt.Sprintf("provider=%s model=%s diff=%s count=%d web_search=%v", prov, model, diff, rc, webSearch))
 	var text string
 	var err error
 	if prov == "anthropic" {
-		text, err = callAnthropic(key, effectiveModel, prompt)
+		text, err = callAnthropic(key, model, prompt)
 	} else {
-		text, err = callOpenAI(key, effectiveModel, prompt, webSearch)
+		text, err = callOpenAI(key, model, prompt, webSearch)
 	}
 	if err != nil {
 		logError("system", "system", "AI_ERROR", err.Error())
-		return generateResult{}, fmt.Errorf("KI-Anbieter antwortet nicht: %s", err.Error())
+		return nil, fmt.Errorf("KI-Anbieter antwortet nicht: %s", err.Error())
 	}
 	logInfo("system", "system", "AI_OK", fmt.Sprintf("len=%d", len(text)))
 	rawResponse := text // keep original for error messages
@@ -115,7 +181,7 @@ func generateQuestions(topic, diff string, count, nO int, prev []string, webSear
 	var qs []Question
 	if err := json.Unmarshal([]byte(text), &qs); err != nil {
 		logError("system", "system", "AI_PARSE_ERROR", fmt.Sprintf("err=%s response=%s", err.Error(), rawResponse))
-		return generateResult{}, fmt.Errorf("KI-Antwort konnte nicht verarbeitet werden (ungültiges Format).\n\nParse-Fehler: %s\n\nAntwort der KI:\n%s", err.Error(), aiPreview(rawResponse))
+		return nil, fmt.Errorf("KI-Antwort konnte nicht verarbeitet werden (ungültiges Format).\n\nParse-Fehler: %s\n\nAntwort der KI:\n%s", err.Error(), aiPreview(rawResponse))
 	}
 	fl := make([]Question, 0, len(qs))
 	for _, q := range qs {
@@ -126,39 +192,11 @@ func generateQuestions(topic, diff string, count, nO int, prev []string, webSear
 			fl = append(fl, q)
 		}
 	}
-	qs = fl
-	if len(qs) == 0 {
+	if len(fl) == 0 {
 		logError("system", "system", "AI_NO_VALID_Q", fmt.Sprintf("response=%s", rawResponse))
-		return generateResult{}, fmt.Errorf("KI-Antwort enthielt keine verwertbaren Fragen.\n\nAntwort der KI:\n%s", aiPreview(rawResponse))
+		return nil, fmt.Errorf("KI-Antwort enthielt keine verwertbaren Fragen.\n\nAntwort der KI:\n%s", aiPreview(rawResponse))
 	}
-	// If fewer than requested, that's still OK — use what we got
-	if len(qs) > count {
-		qs = qs[:count]
-	}
-	for i := range qs {
-		qs[i] = shuffleOpts(qs[i])
-	}
-
-	var result generateResult
-	dedupThreshold := 0.85
-	if ts := getSetting("dedup_similarity_threshold"); ts != "" {
-		if v, _ := strconv.ParseFloat(ts, 64); v > 0 && v <= 1 {
-			dedupThreshold = v
-		}
-	}
-	if existing, err := loadPreparedForTopicDiff(topic, diff, 500); err == nil && len(existing) > 0 {
-		var filtered int
-		qs, filtered = filterNewQuestions(qs, existing, dedupThreshold)
-		if filtered > 0 {
-			logInfo("system", "system", "DEDUP_FILTER",
-				fmt.Sprintf("topic=%s diff=%s removed=%d kept=%d", topic, diff, filtered, len(qs)))
-		}
-		result.FilteredCount = filtered
-	}
-
-	go saveQuestionsBulk(qs, diff, topic, prov, model, nO)
-	result.Questions = qs
-	return result, nil
+	return fl, nil
 }
 
 // webSearchModelFor maps a configured OpenAI model to the corresponding search-capable model.
