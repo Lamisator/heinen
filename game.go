@@ -100,6 +100,8 @@ type Game struct {
 	mu                               sync.Mutex
 	ID, InviteCode, HostID, HostUser string
 	DelegatedTo                      string
+	Anon                             bool   // Host*in ohne Konto (Hosten ohne Anmeldung, hub.go)
+	HostIP                           string // für die Grenzen von Lobbys ohne Konto
 	currentHistoryID                 string
 	Phase                            GamePhase
 	ErrorMsg                         string
@@ -299,6 +301,9 @@ func (g *Game) startGame() error {
 		return fmt.Errorf("not in lobby")
 	}
 	g.Phase = PhaseLoading
+	if g.Anon {
+		g.Settings.WebSearch = false // keine Internet-Recherche ohne Konto (kostet mehr)
+	}
 	for id, p := range g.Players {
 		if !p.Connected {
 			delete(g.Players, id)
@@ -386,7 +391,7 @@ func (g *Game) triggerPrefetch() {
 		return
 	}
 	rem := len(g.Questions) - g.CurrentQ
-	if rem > 10 {
+	if rem > 10 || (g.Anon && len(g.Questions) >= anonMaxQuestions) {
 		return
 	}
 	g.prefetchMu.Lock()
@@ -447,6 +452,15 @@ func (g *Game) nextQuestion() {
 		return
 	}
 	if g.Settings.Mode == ModeClassic && (g.CurrentQ >= len(g.Questions) || active <= 1) {
+		winners := g.getWinners()
+		g.Phase = PhaseEnd
+		g.mu.Unlock()
+		go recordGameEnd(histID, "end", winners)
+		g.broadcastState()
+		return
+	}
+	if g.isEndless() && g.Anon && g.CurrentQ >= len(g.Questions) && len(g.Questions) >= anonMaxQuestions {
+		// Grenze für Spiele ohne Konto erreicht: Schluss, wer noch Zähne hat, gewinnt
 		winners := g.getWinners()
 		g.Phase = PhaseEnd
 		g.mu.Unlock()

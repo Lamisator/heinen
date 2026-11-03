@@ -93,15 +93,23 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			continue
 
 		case "create_game":
-			// Re-check: the session may have been revoked since the socket opened
-			if authUser = getSessionUser(r); authUser == "" {
-				wsError(conn, "Nicht eingeloggt")
-				continue
-			}
 			var p struct{ Name string }
 			json.Unmarshal(msg.Payload, &p)
+			// Re-check: the session may have been revoked since the socket opened
+			hostUser, anon := getSessionUser(r), false
+			if hostUser == "" {
+				// without an account only while the hub allows it (hub.go)
+				var err error
+				if hostUser, err = anonHost(r.Context(), anonIP(r), p.Name); err != nil {
+					wsError(conn, err.Error())
+					continue
+				}
+				anon = true
+			}
+			authUser = hostUser
 			playerID = uuid.New().String()[:12]
 			g := newGame(playerID, p.Name, authUser)
+			g.Anon, g.HostIP = anon, anonIP(r)
 			curInvite = g.InviteCode
 			gamesMu.Lock()
 			games[curInvite] = g
@@ -388,6 +396,10 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			g, ok := games[curInvite]
 			gamesMu.Unlock()
 			if !ok || playerID != g.HostID {
+				continue
+			}
+			if g.Anon && !anonHit("start:"+g.HostIP, anonStartsPerHour, time.Hour) {
+				wsError(conn, "Ohne Konto sind höchstens 6 Spiele pro Stunde möglich. Bitte später versuchen oder anmelden.")
 				continue
 			}
 			go func() {

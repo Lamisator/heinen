@@ -28,6 +28,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -92,8 +93,9 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 	out := map[string]interface{}{}
 	if hubEnabled() {
 		_, err := r.Cookie(hubTryCookie)
+		u := getSessionUser(r)
 		out["sso"] = map[string]string{"label": hubCfg.Label}
-		out["hub"] = map[string]interface{}{"url": hubCfg.URL, "silent": getSessionUser(r) == "" && err != nil}
+		out["hub"] = map[string]interface{}{"url": hubCfg.URL, "silent": u == "" && err != nil, "open": u == "" && openHosting(r.Context())}
 	}
 	json.NewEncoder(w).Encode(out)
 }
@@ -186,6 +188,7 @@ type movePlayer struct {
 
 type movePlan struct {
 	From    string       `json:"from"`
+	Host    string       `json:"host,omitempty"` // Name des*der Host, für Host*s ohne Konto
 	Players []movePlayer `json:"players"`
 }
 
@@ -233,6 +236,7 @@ func moveGame(ctx context.Context, g *Game, playerID, target string) error {
 		}
 		humans++
 		if pid == g.HostID {
+			plan.Host = p.Name
 			continue
 		}
 		k := generateToken()
@@ -308,12 +312,6 @@ func handleImport(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "CSRF token invalid"})
 		return
 	}
-	user := getSessionUser(r)
-	if user == "" {
-		w.WriteHeader(401)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Bitte zuerst anmelden"})
-		return
-	}
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var in movePlan
 	if json.NewDecoder(r.Body).Decode(&in) != nil || len(in.Players) > 64 {
@@ -321,8 +319,25 @@ func handleImport(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "Ungültiger Umzug"})
 		return
 	}
+	user, hostName, anon := getSessionUser(r), "", false
+	if user != "" {
+		hostName = moveName(user)
+	} else {
+		// ohne Konto nur, solange der Hub das Hosten ohne Anmeldung erlaubt
+		if strings.TrimSpace(in.Host) == "" {
+			in.Host = "Host"
+		}
+		hu, err := anonHost(r.Context(), anonIP(r), in.Host)
+		if err != nil {
+			w.WriteHeader(401)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		user, hostName, anon = hu, moveName(in.Host), true
+	}
 	hostID := uuid.New().String()[:12]
-	g := newGame(hostID, moveName(user), user)
+	g := newGame(hostID, hostName, user)
+	g.Anon, g.HostIP = anon, anonIP(r)
 	g.Players[hostID].Connected = false // verbindet sich gleich per Reconnect-Token
 	type claim struct {
 		hash, token string
@@ -390,4 +405,132 @@ func handleClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"code": st.Code, "token": st.Token})
+}
+
+// ─── Hosten ohne Anmeldung ──────────────────────────────────────────────────────
+//
+// Solange der Hub es erlaubt (GET /api/policy, 30 s zwischengespeichert, nicht
+// erreichbar = aus), kann jede*r mit einem Namen eine Lobby eröffnen. Host ist,
+// wer die Lobby eröffnet hat: erkannt an der WebSocket-Verbindung bzw. am
+// Reconnect-Token des Platzes, nie über die Tabelle users.
+//
+// Die KI-Fragen kosten Geld, daher gelten für Lobbys ohne Konto Grenzen:
+// höchstens 60 solche Lobbys gleichzeitig, 10 neue je IP in 10 Minuten,
+// 6 Spielstarts je IP in der Stunde, keine Internet-Recherche und in den
+// endlosen Modi höchstens 100 Fragen je Spiel (danach ist das Spiel aus).
+
+const (
+	maxAnonGames      = 60
+	anonMaxQuestions  = 100
+	anonCreatePer10m  = 10
+	anonStartsPerHour = 6
+)
+
+var openPolicy struct {
+	sync.Mutex
+	open bool
+	at   time.Time
+}
+
+// openHosting: darf gerade jede*r ohne Konto eine Lobby eröffnen?
+func openHosting(ctx context.Context) bool {
+	if !hubEnabled() {
+		return false
+	}
+	openPolicy.Lock()
+	if time.Since(openPolicy.at) < 30*time.Second {
+		o := openPolicy.open
+		openPolicy.Unlock()
+		return o
+	}
+	openPolicy.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	open := false
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, hubCfg.URL+"/api/policy", nil)
+	if res, err := http.DefaultClient.Do(req); err == nil {
+		var p struct {
+			Open bool `json:"open_hosting"`
+		}
+		if res.StatusCode == http.StatusOK && json.NewDecoder(res.Body).Decode(&p) == nil {
+			open = p.Open
+		}
+		res.Body.Close()
+	}
+	openPolicy.Lock()
+	openPolicy.open, openPolicy.at = open, time.Now()
+	openPolicy.Unlock()
+	return open
+}
+
+// anonHits zählt Ereignisse je IP in einem Zeitfenster (Lobbys, Spielstarts).
+var anonHits = struct {
+	sync.Mutex
+	m map[string][]time.Time
+}{m: map[string][]time.Time{}}
+
+func anonHit(key string, max int, window time.Duration) bool {
+	anonHits.Lock()
+	defer anonHits.Unlock()
+	now := time.Now()
+	var keep []time.Time
+	for _, t := range anonHits.m[key] {
+		if now.Sub(t) < window {
+			keep = append(keep, t)
+		}
+	}
+	if len(anonHits.m) > 20000 {
+		anonHits.m = map[string][]time.Time{}
+	}
+	if len(keep) >= max {
+		anonHits.m[key] = keep
+		return false
+	}
+	anonHits.m[key] = append(keep, now)
+	return true
+}
+
+// anonHost prüft, ob jemand ohne Konto mit diesem Namen eine Lobby eröffnen
+// darf; liefert den Host-Eintrag für Logs/Verlauf oder eine Fehlermeldung.
+func anonHost(ctx context.Context, ip, name string) (string, error) {
+	if !openHosting(ctx) {
+		return "", fmt.Errorf("Nicht eingeloggt")
+	}
+	if strings.TrimSpace(name) == "" {
+		return "", fmt.Errorf("Namen eingeben")
+	}
+	gamesMu.Lock()
+	n := 0
+	for _, g := range games {
+		if g.Anon {
+			n++
+		}
+	}
+	gamesMu.Unlock()
+	if n >= maxAnonGames {
+		return "", fmt.Errorf("Gerade sind zu viele Lobbys offen. Bitte versuche es später noch einmal.")
+	}
+	if !anonHit("create:"+ip, anonCreatePer10m, 10*time.Minute) {
+		return "", fmt.Errorf("Zu viele neue Lobbys. Bitte später versuchen.")
+	}
+	return "ohne Konto: " + moveName(name), nil
+}
+
+// anonIP ist die IP für die Grenzen ohne Konto. Anders als getIP traut sie
+// X-Forwarded-For auch von privaten Adressen (Reverse-Proxy im Docker-Netz),
+// sonst teilten sich alle Gäste die IP des Proxys.
+func anonIP(r *http.Request) string {
+	remote, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remote = r.RemoteAddr
+	}
+	if ip := net.ParseIP(remote); ip != nil && (ip.IsLoopback() || ip.IsPrivate()) {
+		if f := r.Header.Get("X-Forwarded-For"); f != "" {
+			return strings.TrimSpace(strings.Split(f, ",")[0])
+		}
+		if f := r.Header.Get("X-Real-IP"); f != "" {
+			return strings.TrimSpace(f)
+		}
+	}
+	return remote
 }

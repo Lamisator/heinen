@@ -143,6 +143,8 @@ Mit `HEINEN_HUB_URL=https://games.antwire.net` meldet HEINEN über den Antwire-H
 | `HEINEN_OIDC_BUTTON_LABEL` | Standard `Antwire-Login` |
 | `HEINEN_ADDR` | Listen-Adresse, Standard `:8671` |
 
+**Hosten ohne Anmeldung:** Solange der Hub es erlaubt (Admin-Seite des Hubs, `GET <hub>/api/policy`, 30 s zwischengespeichert, nicht erreichbar = aus), kann jede*r mit einem Namen eine Lobby eröffnen bzw. eine umgezogene Lobby übernehmen. Host ist, wer die Lobby eröffnet hat (WebSocket-Verbindung/Reconnect-Token), es entsteht kein Konto. Weil die KI-Fragen Geld kosten, gilt ohne Konto: höchstens 60 solche Lobbys gleichzeitig, 10 neue Lobbys je IP in 10 Minuten, 6 Spielstarts je IP und Stunde, keine Internet-Recherche, in den endlosen Modi höchstens 100 Fragen je Spiel. Für diese Grenzen gilt `X-Forwarded-For` auch von privaten Adressen (Reverse-Proxy im Docker-Netz).
+
 Mit Hub ist `HEINEN_ADMIN_PASSWORD` beim ersten Start nicht mehr nötig: der*die erste Hub-Admin wird beim Anmelden Admin.
 
 ## Architektur

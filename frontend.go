@@ -92,6 +92,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 
 <div id="screen-home" class="screen active">
 <div style="max-width:600px;margin:20px auto">
+<div class="sp" id="open-host" style="display:none;text-align:center"><div class="spt">Lobby eröffnen</div>
+<div style="color:var(--text2);font-size:.85rem;margin-bottom:12px">Gerade geht das auch ohne Anmeldung – gib nur deinen Namen ein.</div>
+<div style="display:flex;gap:8px"><input type="text" id="open-name" placeholder="Dein Name..." maxlength="20" style="flex:1" onkeydown="if(event.key==='Enter')openLobby()"/><button class="btn btn-sm btn-p" style="width:auto" onclick="openLobby()">Lobby eröffnen</button></div>
+<div style="color:var(--text2);font-size:.75rem;margin-top:12px">Oder mit Konto:</div></div>
 <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
 <button class="btn btn-p" style="width:auto;padding:12px 24px" id="home-login-btn" onclick="showScreen('login')">Anmelden</button>
 <button class="btn btn-s" style="width:auto;padding:12px 24px;display:none" id="home-panel-btn" onclick="showScreen('dashboard')">User Panel</button>
@@ -409,6 +413,7 @@ function markdownToHtml(md){md=md.replace(/\\\*/g,'\u2605STAR\u2605');md=md.repl
 
 function updateNav(){const n=document.getElementById('nav-bar');const hpb=document.getElementById('home-panel-btn');const hlb=document.getElementById('home-login-btn');
   const sso=!!appConfig.sso;document.querySelectorAll('.sso-btn').forEach(b=>{b.textContent=sso?appConfig.sso.label:'';b.style.display=sso&&!currentUser?(b.id==='home-sso-btn'?'inline-block':'block'):'none'});
+  const oh=document.getElementById('open-host');if(oh){oh.style.display=appConfig.hub&&appConfig.hub.open&&!currentUser?'block':'none';const on=document.getElementById('open-name');if(on&&!on.value)on.value=localStorage.getItem('h_open_name')||''}
   const lb=document.getElementById('sso-link-btn');if(lb)lb.style.display=sso&&currentUser&&!currentUser.sso?'block':'none';
   if(currentUser){n.innerHTML='<span style="color:var(--text2);font-size:.75rem;align-self:center">'+esc(currentUser.username)+'</span><button class="nav-btn" onclick="doLogout()">Abmelden</button>';if(hpb)hpb.style.display='inline-block';if(hlb)hlb.style.display='none'}
   else{n.innerHTML='';if(hpb)hpb.style.display='none';if(hlb)hlb.style.display='inline-block'}
@@ -1278,6 +1283,9 @@ const SSO_ERR={cancelled:'Anmeldung abgebrochen',expired:'Anmeldung abgelaufen \
 async function ssoStart(flow,next){try{const r=await apiFetch('/api/oidc/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flow,next})});const d=await r.json();if(!r.ok){if(flow!=='silent')showToast(d.error||'Fehler',1);return false}location.replace(d.url);return true}catch(e){return false}}
 function ssoLogin(){ssoStart('login',location.pathname==='/m'?'/m':'/')}
 function ssoLink(){ssoStart('link','/')}
+// openLobby: Lobby ohne Konto, solange der Hub das Hosten ohne Anmeldung erlaubt (Einstellungen dann in der Lobby)
+function openLobby(){const n=document.getElementById('open-name').value.trim();if(!n){showToast('Namen eingeben',1);return}
+  try{localStorage.setItem('h_open_name',n)}catch(e){}document.getElementById('host-name').value=n;createGame()}
 // keepMoveHash sichert Platzschl\u00fcssel / Umzugsplan aus dem URL-Fragment von /m, bevor ein Anmelde-Umweg es verliert
 function keepMoveHash(){if(location.pathname==='/m'&&location.hash.length>1){try{sessionStorage.setItem('h_move',location.hash.slice(1))}catch(e){}history.replaceState(null,'','/m')}}
 function renderMoveBox(id,isHost){const el=document.getElementById(id);if(!el)return;
@@ -1296,7 +1304,7 @@ async function movePage(){let raw='';try{raw=sessionStorage.getItem('h_move')||'
   const done=d=>{try{sessionStorage.removeItem('h_move')}catch(e){}history.replaceState(null,'','/');sessionStorage.setItem('h_invite',d.code);
     connectWS();const ck=setInterval(()=>{if(ws&&ws.readyState===1){clearInterval(ck);send('reconnect',{ReconnectToken:d.token})}},100)};
   if(p.has('host')){let plan;try{plan=b64json(p.get('host'))}catch(e){return failed('Der Umzug hat nicht geklappt.')}
-    if(!currentUser){body.innerHTML='<p>Melde dich an, um die Lobby hier zu er\u00f6ffnen. Alle anderen warten so lange.</p>'+(appConfig.sso?'<button class="btn btn-p" onclick="ssoLogin()">Mit '+esc(appConfig.sso.label)+' anmelden</button>':'');return}
+    if(!currentUser&&!(appConfig.hub&&appConfig.hub.open)){body.innerHTML='<p>Melde dich an, um die Lobby hier zu er\u00f6ffnen. Alle anderen warten so lange.</p>'+(appConfig.sso?'<button class="btn btn-p" onclick="ssoLogin()">Mit '+esc(appConfig.sso.label)+' anmelden</button>':'');return}
     wait('Die Lobby wird er\u00f6ffnet \u2026');
     try{const r=await apiFetch('/api/rooms/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(plan)});const d=await r.json();if(!r.ok)return failed(d.error||'Der Umzug hat nicht geklappt.');done(d)}catch(e){failed('Der Umzug hat nicht geklappt.')}
     return}
@@ -1326,7 +1334,7 @@ function handleMessage(msg){switch(msg.type){
 function joinLobby(code,mode){joinPending=code;joinNeedsPw=mode==='pw';document.getElementById('join-pw-group').style.display=joinNeedsPw?'block':'none';showScreen('join')}
 function joinByCode(){const code=document.getElementById('home-invite').value.trim();if(!code){showToast('Code eingeben',1);return};joinPending=code;joinNeedsPw=false;document.getElementById('join-pw-group').style.display='none';showScreen('join')}
 function createGame(){const name=document.getElementById('host-name').value.trim();if(!name){showToast('Namen eingeben',1);return}
-  if(!currentUser){showToast('Bitte zuerst anmelden',1);return}
+  if(!currentUser&&!(appConfig.hub&&appConfig.hub.open)){showToast('Bitte zuerst anmelden',1);return}
   sessionStorage.setItem('h_name',name);connectWS();const check=setInterval(()=>{if(ws&&ws.readyState===1){clearInterval(check);send('create_game',{Name:name,Username:currentUser?currentUser.username:''});
     setTimeout(()=>send('update_settings',{Topic:document.getElementById('create-topic').value||'Allgemeinwissen',Difficulty:document.getElementById('create-diff').value,StartDifficulty:(document.getElementById('create-startdiff')||{}).value||'leicht',Mode:document.getElementById('create-mode').value,NumQuestions:parseInt(document.getElementById('create-questions').value)||10,TimePerQ:parseInt(document.getElementById('create-time').value)||20,NumOptions:parseInt(document.getElementById('create-options').value)||4,NumTeeth:parseInt(document.getElementById('create-teeth').value)||5,ShowTutorial:document.getElementById('create-tutorial').checked,WebSearch:document.getElementById('create-websearch').checked,PlayIntro:document.getElementById('create-playintro').checked,LobbyName:document.getElementById('create-lobbyname').value.trim()||'',LobbyMode:document.getElementById('create-lobbymode').value,LobbyPassword:document.getElementById('create-lobbypw').value||''}),200)}},100)}
 function doJoin(){const name=document.getElementById('join-name').value.trim();if(!name){showToast('Namen eingeben',1);return}
