@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -305,10 +306,8 @@ func handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		logInfo(ip, user, "OIDC_USER_CREATE", fmt.Sprintf("admin=%v", hubAdmin))
-	} else if hubAdmin && !isAdmin(user) {
-		// Admins des Hubs sind hier auch Admins
-		db.Exec("UPDATE users SET is_admin = 1 WHERE username = ?", user)
-		logInfo(ip, user, "OIDC_ADMIN", "promoted by antwire_admin")
+	} else {
+		user = syncProfile(ip, user, str("name"), hubAdmin) // Name und Admin-Recht des Hubs
 	}
 	limiter.RecordSuccess(ip, user)
 	logInfo(ip, user, "OIDC_LOGIN_OK", f.Flow)
@@ -366,4 +365,86 @@ func provisionOIDC(iss, sub string, str func(string) string, admin bool) (string
 		name = fmt.Sprintf("%s %d", string([]rune(base)[:min(29, len([]rune(base)))]), i)
 	}
 	return "", errors.New("no free name")
+}
+
+// handleHubProfile übernimmt eine vom Hub geschickte Änderung von Name oder
+// Admin-Recht: ein ES256-JWT wie ein ID-Token (Audience = "heinen") mit
+// "antwire_event":"profile", geprüft mit dem Verifier der Anmeldung. Ohne
+// CSRF-Token: das JWT ist der Nachweis.
+func handleHubProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(405)
+		return
+	}
+	if !hubEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 16<<10))
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	_, verifier, err := oidcProvider(r.Context())
+	if err != nil {
+		http.Error(w, "identity provider unreachable", http.StatusBadGateway)
+		return
+	}
+	idt, err := verifier.Verify(r.Context(), strings.TrimSpace(string(body)))
+	var cl struct {
+		Event string `json:"antwire_event"`
+		Name  string `json:"name"`
+		Admin bool   `json:"antwire_admin"`
+	}
+	if err != nil || idt.Claims(&cl) != nil || cl.Event != "profile" {
+		logWarn(getIP(r), "", "HUB_PROFILE_REJECTED", fmt.Sprint(err))
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+	var user string
+	if db.QueryRow("SELECT username FROM users WHERE oidc_issuer = ? AND oidc_subject = ?", idt.Issuer, idt.Subject).Scan(&user) == nil {
+		syncProfile(getIP(r), user, cl.Name, cl.Admin)
+	}
+	w.WriteHeader(http.StatusNoContent) // auch ohne Konto hier
+}
+
+// syncProfile übernimmt den Namen des Hubs (durchnummeriert, falls hier
+// vergeben) und macht Hub-Admins hier zu Admins (nie umgekehrt). HEINEN kennt
+// nur den Benutzernamen, und der ist beim Passwort-Login die Kennung: umbenannt
+// werden daher nur Konten ohne Passwort (vom Antwire-Login angelegt).
+// Liefert den (neuen) Benutzernamen.
+func syncProfile(ip, user, name string, admin bool) string {
+	var pw string
+	db.QueryRow("SELECT password FROM users WHERE username = ?", user).Scan(&pw)
+	if n, ok := cleanUserName(name); ok && n != user && pw == "" {
+		for i := 1; i < 10; i++ {
+			cand := n
+			if i > 1 {
+				cand = fmt.Sprintf("%s %d", string([]rune(n)[:min(len([]rune(n)), 29)]), i)
+			}
+			if strings.EqualFold(cand, user) {
+				break
+			}
+			tx, err := db.Begin()
+			if err != nil {
+				break
+			}
+			if _, err = tx.Exec("UPDATE users SET username = ? WHERE username = ?", cand, user); err == nil {
+				_, err = tx.Exec("UPDATE sessions SET username = ? WHERE username = ?", cand, user)
+			}
+			if err != nil {
+				tx.Rollback()
+				continue // Name hier schon vergeben
+			}
+			tx.Commit()
+			logInfo(ip, cand, "HUB_RENAME", "from="+user)
+			user = cand
+			break
+		}
+	}
+	if admin && !isAdmin(user) {
+		db.Exec("UPDATE users SET is_admin = 1 WHERE username = ?", user)
+		logInfo(ip, user, "OIDC_ADMIN", "promoted by antwire_admin")
+	}
+	return user
 }

@@ -109,6 +109,7 @@ func main() {
 	mux.HandleFunc("/api/config", handleConfig)
 	mux.HandleFunc("/api/oidc/start", handleOIDCStart)
 	mux.HandleFunc("/auth/oidc/callback", handleOIDCCallback)
+	mux.HandleFunc("/auth/hub/profile", handleHubProfile)
 	mux.HandleFunc("/api/move-targets", handleMoveTargets)
 	mux.HandleFunc("/api/rooms/import", handleImport)
 	mux.HandleFunc("/api/move/claim", handleClaim)
