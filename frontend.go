@@ -1286,7 +1286,7 @@ function renderMoveBox(id,isHost){const el=document.getElementById(id);if(!el)re
   const body=moveTargets===null?'<p>Spiele werden geladen \u2026</p>':!moveTargets.length?'<p>Gerade ist kein anderes Spiel erreichbar.</p>'
     :'<div class="move-games">'+moveTargets.map(g=>'<button class="btn btn-s btn-sm"'+' onclick="moveTo(\''+esc(g.id)+'\',this.dataset.name)" data-name="'+esc(g.name)+'">'+esc(g.name)+(g.max?' <small>\u00b7 max. '+g.max+'</small>':'')+'</button>').join('')+'</div>';
   el.innerHTML='<details'+(moveOpen?' open':'')+' ontoggle="moveOpen=this.open"><summary>&#128666; In ein anderes Spiel umziehen</summary><p>Alle in der Lobby kommen mit.</p>'+body+'</details>'}
-function moveTo(id,name){if(!confirm('Die Lobby mit allen nach '+name+' umziehen? Das Spiel hier endet.'))return;send('move_game',{game:id})}
+function moveTo(id,name){if(!confirm('Mit der ganzen Lobby zu '+name+' umziehen? Das Spiel hier endet.'))return;send('move_game',{game:id})}
 function b64json(s){const b=atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4));return JSON.parse(new TextDecoder().decode(Uint8Array.from(b,c=>c.charCodeAt(0))))}
 // movePage (/m): der*die Host er\u00f6ffnet die Lobby, alle anderen holen ihren Platz ab
 async function movePage(){let raw='';try{raw=sessionStorage.getItem('h_move')||''}catch(e){}
@@ -1321,7 +1321,7 @@ function handleMessage(msg){switch(msg.type){
   case 'state':gameState=msg.payload;if(!shuffleAnimating)renderGame();break;case 'error':showToast(msg.payload.message,1);break;
   case 'kicked':showToast(msg.payload.message,1);gameState=null;stopBg();stopGenSound();sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');showScreen('home');break;
   case 'shuffle_animation':shuffleAnimation(msg.payload);break;
-  case 'moved':sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');stopBg();stopGenSound();showToast('Umzug nach '+(msg.payload.game||'…')+' \u2026',0);try{ws.close()}catch(e){}location.href=msg.payload.url;break}}
+  case 'moved':sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');stopBg();stopGenSound();showToast('Umzug zu '+(msg.payload.game||'…')+' \u2026',0);try{ws.close()}catch(e){}location.href=msg.payload.url;break}}
 
 function joinLobby(code,mode){joinPending=code;joinNeedsPw=mode==='pw';document.getElementById('join-pw-group').style.display=joinNeedsPw?'block':'none';showScreen('join')}
 function joinByCode(){const code=document.getElementById('home-invite').value.trim();if(!code){showToast('Code eingeben',1);return};joinPending=code;joinNeedsPw=false;document.getElementById('join-pw-group').style.display='none';showScreen('join')}
