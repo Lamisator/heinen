@@ -155,7 +155,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		case "reconnect":
 			var p struct{ ReconnectToken string }
 			json.Unmarshal(msg.Payload, &p)
-			playerID, gameID, ok := validateReconnectToken(p.ReconnectToken)
+			pid, gameID, ok := validateReconnectToken(p.ReconnectToken)
 			if !ok {
 				wsError(conn, "Ungültiges Reconnect-Token")
 				continue
@@ -177,7 +177,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				wsError(conn, "Spiel nicht gefunden")
 				continue
 			}
-			if ok := g.reconnectPlayerByID(playerID, conn); ok {
+			if ok := g.reconnectPlayerByID(pid, conn); ok {
+				playerID = pid // also for this connection's later messages and the disconnect cleanup
 				d, _ := json.Marshal(map[string]interface{}{"type": "reconnected", "payload": map[string]string{"playerId": playerID, "gameId": g.ID, "inviteCode": curInvite}})
 				conn.WriteMessage(websocket.TextMessage, d)
 				g.broadcastState()
@@ -456,6 +457,22 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			g.mu.Unlock()
 			g.broadcastState()
+
+		case "move_game":
+			// Antwire: the host moves the lobby with everybody to another game (hub.go)
+			gamesMu.Lock()
+			g, ok := games[curInvite]
+			gamesMu.Unlock()
+			if !ok {
+				continue
+			}
+			var p struct {
+				Game string `json:"game"`
+			}
+			json.Unmarshal(msg.Payload, &p)
+			if err := moveGame(r.Context(), g, playerID, p.Game); err != nil {
+				wsError(conn, err.Error())
+			}
 
 		case "leave_game":
 			// Any player can leave from error phase — return to lobby

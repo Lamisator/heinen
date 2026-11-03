@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -89,6 +90,14 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
+	if hubEnabled() {
+		// auch beim Antwire-Login abmelden, sonst meldet der nächste Besuch wieder an
+		http.SetCookie(w, &http.Cookie{Name: hubTryCookie, Value: "1", Path: "/", HttpOnly: true, Secure: isHTTPS(r),
+			SameSite: http.SameSiteLaxMode, MaxAge: int(hubTryEvery.Seconds())})
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true,
+			"redirect": hubCfg.URL + "/oidc/logout?post_logout_redirect_uri=" + url.QueryEscape(baseURL(r)+"/")})
+		return
+	}
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
@@ -100,7 +109,9 @@ func handleMe(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "not logged in"})
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{"username": u, "isAdmin": isAdmin(u)})
+	var sub string
+	db.QueryRow("SELECT oidc_subject FROM users WHERE username = ?", u).Scan(&sub)
+	json.NewEncoder(w).Encode(map[string]interface{}{"username": u, "isAdmin": isAdmin(u), "sso": sub != ""})
 }
 
 func handleChangePassword(w http.ResponseWriter, r *http.Request) {

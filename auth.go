@@ -17,6 +17,9 @@ func hashPassword(pw string) string {
 
 // getPasswordHashType returns the hashing algorithm type: "bcrypt", "sha256", or "legacy"
 func getPasswordHashType(stored string) string {
+	if stored == "" {
+		return "sso" // angelegt über den Antwire-Login, kein Passwort
+	}
 	if strings.HasPrefix(stored, "$2") {
 		return "bcrypt"
 	}

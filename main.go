@@ -30,9 +30,11 @@ func main() {
 	initLog()
 	initDB()
 	initQuestionsDB()
+	initHub()
 
 	// Require secure admin bootstrap: fail if no admin exists and no bootstrap credentials provided
-	if countAdmins() == 0 {
+	// (with the Antwire login, the first hub admin to sign in becomes admin here)
+	if countAdmins() == 0 && !(hubEnabled() && os.Getenv("HEINEN_ADMIN_PASSWORD") == "") {
 		adminPass := os.Getenv("HEINEN_ADMIN_PASSWORD")
 		if adminPass == "" {
 			log.Fatal("ERROR: No admin account exists. Bootstrap via HEINEN_ADMIN_PASSWORD=<password> HEINEN_ADMIN_USER=<username> (default: admin)")
@@ -47,7 +49,11 @@ func main() {
 		logInfo("system", "system", "INIT", "Admin account bootstrapped: "+adminUser)
 	}
 
-	logInfo("system", "system", "STARTUP", fmt.Sprintf("Port=%d", Port))
+	addr := os.Getenv("HEINEN_ADDR")
+	if addr == "" {
+		addr = fmt.Sprintf(":%d", Port)
+	}
+	logInfo("system", "system", "STARTUP", "Addr="+addr+" Hub="+hubCfg.URL)
 
 	// Migrate legacy passwords from plaintext/salt:hash to bcrypt (one-time)
 	migrateLegacyPasswords()
@@ -68,7 +74,7 @@ func main() {
 	}()
 
 
-	log.Printf("🦷 Heinen auf http://localhost:%d", Port)
+	log.Printf("🦷 Heinen auf %s", addr)
 	mux := http.NewServeMux()
 
 	// API routes
@@ -99,6 +105,14 @@ func main() {
 	mux.HandleFunc("/api/passkey/login/finish", handlePasskeyLoginFinish)
 	mux.HandleFunc("/api/passkey/credentials", handlePasskeyCredentials)
 
+	// Antwire-Login + Lobby-Umzüge (hub.go, oidc.go)
+	mux.HandleFunc("/api/config", handleConfig)
+	mux.HandleFunc("/api/oidc/start", handleOIDCStart)
+	mux.HandleFunc("/auth/oidc/callback", handleOIDCCallback)
+	mux.HandleFunc("/api/move-targets", handleMoveTargets)
+	mux.HandleFunc("/api/rooms/import", handleImport)
+	mux.HandleFunc("/api/move/claim", handleClaim)
+
 	// Static and dynamic
 	mux.HandleFunc("/sounds/", handleSoundFile)
 	mux.Handle("/fonts/", http.StripPrefix("/fonts/", http.FileServer(http.Dir("fonts"))))
@@ -111,7 +125,7 @@ func main() {
 	})
 
 	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", Port),
+		Addr:              addr,
 		Handler:           securityHeadersMiddleware(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,

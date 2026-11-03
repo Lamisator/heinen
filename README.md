@@ -126,6 +126,25 @@ Nur für Admin-User sichtbar:
 - Passwort-Hashing: SHA-256 mit 16-Byte-Salt; Legacy-Plaintext-Passwörter werden bei erstem Login automatisch migriert
 - Beitreten per Einladungslink erfordert keinen Account
 
+## Antwire-Login und Lobby-Umzüge
+
+Mit `HEINEN_HUB_URL=https://games.antwire.net` meldet HEINEN über den Antwire-Hub an (OpenID Connect, Client-ID `heinen`, Redirect `<Basis-URL>/auth/oidc/callback`):
+
+- Knopf „Antwire-Login" auf Start- und Anmeldeseite; ohne Anmeldung versucht der Browser höchstens alle 30 Minuten eine stille Anmeldung
+- Konten, für die der Hub bürgt, werden automatisch angelegt (ohne Passwort); Hub-Admins werden hier Admin. Bestehende Konten lassen sich im User Panel verknüpfen; Passwort und Passkey funktionieren weiter
+- Abmelden meldet auch beim Hub ab
+- Der*die Host kann die Lobby (oder nach Spielende) mit allen in ein anderes Antwire-Spiel umziehen; Lobbys aus anderen Spielen kommen über `/m` an (`POST /api/rooms/import`, `POST /api/move/claim`)
+
+| Variable | Bedeutung |
+|---|---|
+| `HEINEN_HUB_URL` | Hub-Adresse; leer = kein Antwire-Login, keine Umzüge |
+| `HEINEN_BASE_URL` | öffentliche Adresse, z. B. `https://heinen.antwire.net` (sonst aus Host/X-Forwarded-Proto) |
+| `HEINEN_HUB_CLIENT_ID` | Standard `heinen` |
+| `HEINEN_OIDC_BUTTON_LABEL` | Standard `Antwire-Login` |
+| `HEINEN_ADDR` | Listen-Adresse, Standard `:8671` |
+
+Mit Hub ist `HEINEN_ADMIN_PASSWORD` beim ersten Start nicht mehr nötig: der*die erste Hub-Admin wird beim Anmelden Admin.
+
 ## Architektur
 
 ```

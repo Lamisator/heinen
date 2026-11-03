@@ -1,13 +1,17 @@
 module heinen
 
-go 1.25.0
+go 1.26.0
 
 require (
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/mattn/go-sqlite3 v1.14.24
 	golang.org/x/crypto v0.50.0
+	golang.org/x/oauth2 v0.37.0
 )
+
+require github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect

@@ -16,6 +16,8 @@ var indexHTML = `<!DOCTYPE html>
 @font-face{font-family:'Space Mono';font-style:normal;font-weight:700;font-display:swap;src:url('/fonts/SpaceMono-Bold.woff2') format('woff2')}
 :root{--bg:#0a0a0f;--bg2:#12121a;--surface:#1e1e2e;--border:#2a2a3e;--text:#e4e4ef;--text2:#8888a0;--accent:#ff3366;--accent2:#ff6b9d;--correct:#00e68a;--wrong:#ff3366;--gold:#ffd700;--tooth-white:#f0ece0;--tooth-dead:#1a1a1a}
 *{margin:0;padding:0;box-sizing:border-box}
+.move-box{max-width:520px;margin:18px auto 0;text-align:left}.move-box details{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 16px}.move-box summary{cursor:pointer;font-size:.85rem;color:var(--text2);font-weight:600}.move-box p{color:var(--text2);font-size:.75rem;margin:8px 0}.move-games{display:flex;flex-wrap:wrap;gap:8px}.move-games .btn{width:auto}.move-games .btn small{color:var(--text2);font-weight:400;text-transform:none;letter-spacing:0}
+#move-body p{color:var(--text2);margin:12px 0}
 body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 20% 50%,rgba(255,51,102,.06) 0%,transparent 50%),radial-gradient(ellipse at 80% 20%,rgba(255,107,157,.04) 0%,transparent 50%),radial-gradient(ellipse at 50% 80%,rgba(255,215,0,.03) 0%,transparent 50%)}
 .app{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:20px;min-height:100vh}
@@ -93,6 +95,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
 <button class="btn btn-p" style="width:auto;padding:12px 24px" id="home-login-btn" onclick="showScreen('login')">Anmelden</button>
 <button class="btn btn-s" style="width:auto;padding:12px 24px;display:none" id="home-panel-btn" onclick="showScreen('dashboard')">User Panel</button>
+<button class="btn btn-s sso-btn" style="width:auto;padding:12px 24px;display:none" id="home-sso-btn" onclick="ssoLogin()">Antwire-Login</button>
 </div>
 <div class="pst">Offene Lobbys</div>
 <div id="lobby-list"><div style="color:var(--text2);text-align:center;padding:20px">Keine offenen Lobbys vorhanden.</div></div>
@@ -106,6 +109,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div class="ig"><label>Passwort</label><input type="password" id="login-pass" autocomplete="current-password"/></div>
 <button class="btn btn-p" onclick="doLogin()">Anmelden</button>
 <button class="btn btn-s" id="passkey-login-btn" onclick="doPasskeyLogin()" style="margin-top:6px">🔑 Mit Passkey anmelden</button>
+<button class="btn btn-s sso-btn" id="sso-login-btn" onclick="ssoLogin()" style="margin-top:6px;display:none">Antwire-Login</button>
 <button class="btn btn-s" onclick="goHome()" style="margin-top:10px">Zurück</button></div></div>
 
 <div id="screen-dashboard" class="screen"><div class="dc"><div style="font-size:1rem;color:var(--text2);margin-bottom:24px" id="welcome-text"></div>
@@ -113,6 +117,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <button class="btn btn-s" id="btn-admin" onclick="loadAdmin();showScreen('admin')" style="display:none">Admin Control Panel</button>
 <button class="btn btn-s" onclick="showScreen('pw')">Passwort ändern</button>
 <button class="btn btn-s" onclick="loadPasskeys();showScreen('passkeys')">🔑 Passkeys verwalten</button>
+<button class="btn btn-s" id="sso-link-btn" onclick="ssoLink()" style="display:none">Mit Antwire-Login verknüpfen</button>
 <button class="btn btn-s" onclick="goHome()">Zurück zur Startseite</button></div></div></div>
 
 <div id="screen-passkeys" class="screen"><div class="cc">
@@ -209,7 +214,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div class="pst" id="players-count">Spieler*innen (0)</div>
 <div class="pg" id="lobby-players"></div>
 <div id="spectate-toggle" style="text-align:center;margin-bottom:12px"></div>
-<div id="start-btn-container" style="display:none;text-align:center"><button class="btn btn-p" onclick="startGame()" style="max-width:280px">Spiel starten</button></div></div></div>
+<div id="start-btn-container" style="display:none;text-align:center"><button class="btn btn-p" onclick="startGame()" style="max-width:280px">Spiel starten</button></div>
+<div class="move-box" id="lobby-move"></div></div></div>
 
 <div id="screen-loading" class="screen"><div class="loading-container"><div class="tooth-mount"></div><div class="loading-text">Fragen werden generiert...</div></div></div>
 <div id="screen-refill" class="screen"><div class="loading-container"><div class="tooth-mount"></div><div class="loading-text">Neue Fragen werden nachgeladen...</div></div></div>
@@ -222,7 +228,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div class="ri" id="results-info" style="display:none"></div>
 <div class="pst" id="game-players-title">Spieler*innen</div><div class="pg" id="game-players"></div>
 <div class="host-controls" id="host-controls" style="display:none"><button class="btn btn-d" onclick="endGameEarly()">Spiel vorzeitig beenden</button></div></div>
-<div id="screen-end" class="screen"><div class="end-container"><div id="end-content"></div><div id="end-players"></div><div id="end-actions" style="margin-top:20px"></div></div></div>
+<div id="screen-end" class="screen"><div class="end-container"><div id="end-content"></div><div id="end-players"></div><div id="end-actions" style="margin-top:20px"></div><div class="move-box" id="end-move"></div></div></div>
+<div id="screen-move" class="screen"><div class="login-container"><div class="login-title">&#128666; Umzug</div><div id="move-body" style="text-align:center"></div></div></div>
 <div id="screen-error" class="screen"><div class="end-container" style="max-width:500px">
 <div style="font-size:3rem;margin-bottom:16px">&#9888;</div>
 <div style="font-size:1.3rem;font-weight:700;color:var(--wrong);margin-bottom:14px">Fehler bei der Fragengenerierung</div>
@@ -360,7 +367,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <script src="/js/tooth3d.js"></script>
 <script>
 let ws=null,myId='',inviteCode='',gameState=null,selectedAnswer=-1,timerInterval=null,currentTimeLeft=0,shuffleAnimating=false;
-let currentUser=null,joinPending='',joinNeedsPw=false,joinLobbyPw='';
+let appConfig={},currentUser=null,joinPending='',joinNeedsPw=false,joinLobbyPw='';
 let globalSounds={},bgMuted=false,bgStarted=false,tutorialHtml='';
 const DL={leicht:'Leicht',mittel:'Mittel',schwer:'Schwer',extrem:'Extrem'};
 const ML={classic:'Klassisch',elimination:'Elimination',kfo_battle_royale:'KFO Battle Royale',kfo_singleplayer:'KFO Singleplayer'};
@@ -375,8 +382,14 @@ async function apiFetch(url,opts={}){const method=opts.method||'GET';const heade
 
 (async function(){
   mountToothSpinners();
+  keepMoveHash();
+  try{const r=await fetch('/api/config');if(r.ok)appConfig=await r.json()}catch(e){}
+  if(appConfig.hub&&appConfig.hub.silent&&await ssoStart('silent',location.pathname+location.search))return;
   const p=new URLSearchParams(location.search);const inv=p.get('join');
+  if(p.get('sso_error')){showToast(SSO_ERR[p.get('sso_error')]||'Anmeldung fehlgeschlagen',1);history.replaceState(null,'','/')}
+  if(p.get('sso')==='linked'){showToast('Mit dem Antwire-Login verkn\u00fcpft',0);history.replaceState(null,'','/')}
   await loadSounds();await loadTutorial();
+  if(location.pathname==='/m'){try{const r=await fetch('/api/me');if(r.ok)currentUser=await r.json()}catch(e){}updateNav();movePage();return}
   if(inv){joinPending=inv;showScreen('join');return}
   // Try auto-reconnect
   const ri=sessionStorage.getItem('h_invite'),rn=sessionStorage.getItem('h_name');
@@ -395,6 +408,8 @@ async function loadLobbies(){try{const r=await fetch('/api/lobbies');const lobbi
 function markdownToHtml(md){md=md.replace(/\\\*/g,'\u2605STAR\u2605');md=md.replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^# (.+)$/gm,'<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/(<li>[\s\S]*?<\/li>)/g,function(m){return '<ul>'+m+'</ul>'}).replace(/<\/ul>\s*<ul>/g,'').replace(/^(?!<[hulo])(.*\S.*)$/gm,'<p>$1</p>');md=md.replace(/\u2605STAR\u2605/g,'*');return md}
 
 function updateNav(){const n=document.getElementById('nav-bar');const hpb=document.getElementById('home-panel-btn');const hlb=document.getElementById('home-login-btn');
+  const sso=!!appConfig.sso;document.querySelectorAll('.sso-btn').forEach(b=>{b.textContent=sso?appConfig.sso.label:'';b.style.display=sso&&!currentUser?(b.id==='home-sso-btn'?'inline-block':'block'):'none'});
+  const lb=document.getElementById('sso-link-btn');if(lb)lb.style.display=sso&&currentUser&&!currentUser.sso?'block':'none';
   if(currentUser){n.innerHTML='<span style="color:var(--text2);font-size:.75rem;align-self:center">'+esc(currentUser.username)+'</span><button class="nav-btn" onclick="doLogout()">Abmelden</button>';if(hpb)hpb.style.display='inline-block';if(hlb)hlb.style.display='none'}
   else{n.innerHTML='';if(hpb)hpb.style.display='none';if(hlb)hlb.style.display='inline-block'}
   syncSessionStream()}
@@ -423,7 +438,7 @@ function toggleLobbyPw(){document.getElementById('lobby-pw-group').style.display
 
 async function doLogin(){const u=document.getElementById('login-user').value.trim(),p=document.getElementById('login-pass').value;if(!u||!p){showToast('Felder ausfüllen',1);return}
   const r=await apiFetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});const d=await r.json();if(!r.ok){showToast(d.error||'Fehler',1);return}currentUser=d;showScreen('dashboard');updateNav()}
-async function doLogout(){currentUser=null;updateNav();await apiFetch('/api/logout',{method:'POST'});showScreen('home')}
+async function doLogout(){currentUser=null;updateNav();try{const r=await apiFetch('/api/logout',{method:'POST'});const d=await r.json();if(d.redirect){location.href=d.redirect;return}}catch(e){}showScreen('home')}
 async function changePw(){const o=document.getElementById('pw-old').value,n=document.getElementById('pw-new').value,n2=document.getElementById('pw-new2').value;if(!o||!n){showToast('Felder ausfüllen',1);return}if(n!==n2){showToast('Nicht überein',1);return}
   const r=await apiFetch('/api/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({OldPassword:o,NewPassword:n})});const d=await r.json();if(d.error){showToast(d.error,1);return}currentUser=null;updateNav();showScreen('login');showToast('Passwort geändert \u2013 bitte neu anmelden',0)}
 
@@ -1257,6 +1272,40 @@ function stopGenSound(){const a=document.getElementById('gen-audio');if(!a)retur
 function toggleMute(){bgMuted=!bgMuted;const a=document.getElementById('bg-audio'),g=document.getElementById('gen-audio'),b=document.getElementById('mute-btn');if(bgMuted){a.pause();if(g)g.pause();b.innerHTML='&#128264;';b.classList.add('muted')}else{if(bgStarted)tryPlayBg(3);if(g&&genStarted){const p=g.play();if(p&&p.catch)p.catch(()=>{})}b.innerHTML='&#128266;';b.classList.remove('muted')}}
 function adjustBgVol(v){const a=document.getElementById('bg-audio');a.volume=parseFloat(v);if(bgMuted&&parseFloat(v)>0){bgMuted=false;const b=document.getElementById('mute-btn');b.innerHTML='&#128266;';b.classList.remove('muted');if(bgStarted)tryPlayBg(3)}}
 
+// Antwire-Login und Lobby-Umz\u00fcge (hub.go, oidc.go)
+let moveTargets=null,moveLoading=false,moveOpen=false;
+const SSO_ERR={cancelled:'Anmeldung abgebrochen',expired:'Anmeldung abgelaufen \u2013 bitte nochmal',provider:'Der Antwire-Login hat nicht geantwortet',taken:'Dieser Antwire-Login ist schon mit einem anderen Konto verkn\u00fcpft',relogin:'Bitte neu anmelden und nochmal verkn\u00fcpfen',internal:'Anmeldung fehlgeschlagen'};
+async function ssoStart(flow,next){try{const r=await apiFetch('/api/oidc/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flow,next})});const d=await r.json();if(!r.ok){if(flow!=='silent')showToast(d.error||'Fehler',1);return false}location.replace(d.url);return true}catch(e){return false}}
+function ssoLogin(){ssoStart('login',location.pathname==='/m'?'/m':'/')}
+function ssoLink(){ssoStart('link','/')}
+// keepMoveHash sichert Platzschl\u00fcssel / Umzugsplan aus dem URL-Fragment von /m, bevor ein Anmelde-Umweg es verliert
+function keepMoveHash(){if(location.pathname==='/m'&&location.hash.length>1){try{sessionStorage.setItem('h_move',location.hash.slice(1))}catch(e){}history.replaceState(null,'','/m')}}
+function renderMoveBox(id,isHost){const el=document.getElementById(id);if(!el)return;
+  if(!isHost||!appConfig.hub){el.innerHTML='';return}
+  if(moveTargets===null&&!moveLoading){moveLoading=true;fetch('/api/move-targets').then(r=>r.ok?r.json():[]).then(l=>{moveTargets=l||[]}).catch(()=>{moveTargets=[]}).finally(()=>{moveLoading=false;if(gameState)renderMoveBox(id,myId===gameState.hostId)})}
+  const body=moveTargets===null?'<p>Spiele werden geladen \u2026</p>':!moveTargets.length?'<p>Gerade ist kein anderes Spiel erreichbar.</p>'
+    :'<div class="move-games">'+moveTargets.map(g=>'<button class="btn btn-s btn-sm"'+' onclick="moveTo(\''+esc(g.id)+'\',this.dataset.name)" data-name="'+esc(g.name)+'">'+esc(g.name)+(g.max?' <small>\u00b7 max. '+g.max+'</small>':'')+'</button>').join('')+'</div>';
+  el.innerHTML='<details'+(moveOpen?' open':'')+' ontoggle="moveOpen=this.open"><summary>&#128666; In ein anderes Spiel umziehen</summary><p>Alle in der Lobby kommen mit.</p>'+body+'</details>'}
+function moveTo(id,name){if(!confirm('Die Lobby mit allen nach '+name+' umziehen? Das Spiel hier endet.'))return;send('move_game',{game:id})}
+function b64json(s){const b=atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4));return JSON.parse(new TextDecoder().decode(Uint8Array.from(b,c=>c.charCodeAt(0))))}
+// movePage (/m): der*die Host er\u00f6ffnet die Lobby, alle anderen holen ihren Platz ab
+async function movePage(){let raw='';try{raw=sessionStorage.getItem('h_move')||''}catch(e){}
+  const p=new URLSearchParams(raw),body=document.getElementById('move-body');showScreen('move');
+  const wait=t=>{body.innerHTML='<div class="tooth-mount"></div><p>'+t+'</p>';mountToothSpinners()};
+  const failed=t=>{try{sessionStorage.removeItem('h_move')}catch(e){}body.innerHTML='<p>'+esc(t)+'</p><button class="btn btn-s" onclick="goHome()">Zur Startseite</button>'};
+  const done=d=>{try{sessionStorage.removeItem('h_move')}catch(e){}history.replaceState(null,'','/');sessionStorage.setItem('h_invite',d.code);
+    connectWS();const ck=setInterval(()=>{if(ws&&ws.readyState===1){clearInterval(ck);send('reconnect',{ReconnectToken:d.token})}},100)};
+  if(p.has('host')){let plan;try{plan=b64json(p.get('host'))}catch(e){return failed('Der Umzug hat nicht geklappt.')}
+    if(!currentUser){body.innerHTML='<p>Melde dich an, um die Lobby hier zu er\u00f6ffnen. Alle anderen warten so lange.</p>'+(appConfig.sso?'<button class="btn btn-p" onclick="ssoLogin()">Mit '+esc(appConfig.sso.label)+' anmelden</button>':'');return}
+    wait('Die Lobby wird er\u00f6ffnet \u2026');
+    try{const r=await apiFetch('/api/rooms/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(plan)});const d=await r.json();if(!r.ok)return failed(d.error||'Der Umzug hat nicht geklappt.');done(d)}catch(e){failed('Der Umzug hat nicht geklappt.')}
+    return}
+  if(p.has('k')){wait('Gleich geht\u2019s weiter: die Lobby wird gerade er\u00f6ffnet \u2026');const key=p.get('k'),until=Date.now()+5*60*1000;
+    while(Date.now()<until){try{const r=await fetch('/api/move/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});if(r.status===200)return done(await r.json())}catch(e){}
+      await new Promise(r=>setTimeout(r,1500))}
+    return failed('Der Umzug hat nicht geklappt \u2013 der Platz ist abgelaufen. Frag nach dem Einladungslink.')}
+  history.replaceState(null,'','/');showScreen('home');loadLobbies()}
+
 // WebSocket
 let wsKeepalive=null;
 function connectWS(){if(ws&&ws.readyState<=1)return;const proto=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(proto+'//'+location.host+'/ws');
@@ -1271,7 +1320,8 @@ function handleMessage(msg){switch(msg.type){
   case 'joined':case 'reconnected':myId=msg.payload.playerId;inviteCode=msg.payload.inviteCode;sessionStorage.setItem('h_invite',inviteCode);break;
   case 'state':gameState=msg.payload;if(!shuffleAnimating)renderGame();break;case 'error':showToast(msg.payload.message,1);break;
   case 'kicked':showToast(msg.payload.message,1);gameState=null;stopBg();stopGenSound();sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');showScreen('home');break;
-  case 'shuffle_animation':shuffleAnimation(msg.payload);break}}
+  case 'shuffle_animation':shuffleAnimation(msg.payload);break;
+  case 'moved':sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');stopBg();stopGenSound();showToast('Umzug nach '+(msg.payload.game||'…')+' \u2026',0);try{ws.close()}catch(e){}location.href=msg.payload.url;break}}
 
 function joinLobby(code,mode){joinPending=code;joinNeedsPw=mode==='pw';document.getElementById('join-pw-group').style.display=joinNeedsPw?'block':'none';showScreen('join')}
 function joinByCode(){const code=document.getElementById('home-invite').value.trim();if(!code){showToast('Code eingeben',1);return};joinPending=code;joinNeedsPw=false;document.getElementById('join-pw-group').style.display='none';showScreen('join')}
@@ -1448,7 +1498,8 @@ function renderLobby(isHost){
   const meSpec=amISpectator();
   document.getElementById('spectate-toggle').innerHTML='<button class="btn btn-s btn-sm" onclick="toggleSpectator()" style="max-width:280px">'+(meSpec?'&#127918; Doch mitspielen':'&#128065; Nur zuschauen')+'</button>'
     +(isHost&&nPlay===0?'<div style="color:var(--text2);font-size:.8rem;margin-top:8px">Mindestens eine Person muss mitspielen.</div>':'');
-  document.getElementById('start-btn-container').style.display=(isHost&&nPlay>=1)?'block':'none'}
+  document.getElementById('start-btn-container').style.display=(isHost&&nPlay>=1)?'block':'none';
+  renderMoveBox('lobby-move',isHost)}
 
 function renderTeeth(p,anim,showLost,showDead){let upper=[],lower=[];for(let i=0;i<p.maxTeeth;i++){const alive=i<p.teeth,lost=anim&&p.justLost&&i===p.teeth;const row=i%2===0?'upper':'lower';const cls='tooth '+row+(alive?' alive':' dead')+(lost?' just-lost':'');if(i%2===0)upper.push('<div class="'+cls+'"></div>');else lower.push('<div class="'+cls+'"></div>')}
   let h='<div class="teeth-wrap"><div class="teeth-rows"><div class="tooth-row">'+upper.join('')+'</div><div class="tooth-row">'+lower.join('')+'</div></div>';
@@ -1486,6 +1537,7 @@ function renderEnd(isHost){const c=document.getElementById('end-content'),player
   const wIds=new Set(winners.map(w=>w.id));const sorted=players.filter(p=>!p.spectator).sort((a,b)=>b.teeth-a.teeth),specs=players.filter(p=>p.spectator);
   document.getElementById('end-players').innerHTML='<div class="pst">Endergebnis</div><div class="pg">'+sorted.map(p=>{const w=wIds.has(p.id);return '<div class="pc'+(!p.alive?' eliminated':'')+'" style="'+(w?'border-color:var(--gold);box-shadow:0 0 16px rgba(255,215,0,.2)':'')+'"><div class="pn">'+(w?'&#128081; ':'')+esc(p.name)+' <span style="color:var(--text2);font-size:.75rem">('+p.teeth+'/'+p.maxTeeth+')</span></div><div class="ps'+(w?' host':(!p.alive?' elim':''))+'">'+
     (w?'Gewinner*in!':(!p.alive?'Ausgeschieden':'Überlebt'))+'</div>'+renderTeeth(p,false,false,false)+'</div>'}).join('')+specs.map(p=>spectatorCard(p,'',true)).join('')+'</div>';
+  renderMoveBox('end-move',isHost);
   document.getElementById('end-actions').innerHTML=isHost?'<button class="btn btn-p" onclick="playAgain()" style="max-width:280px;margin:0 auto">Nochmal spielen</button>':'<div style="color:var(--text2)">Warte auf den*die Host...</div>';
   sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name')}
 
