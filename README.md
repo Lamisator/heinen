@@ -169,3 +169,7 @@ heinen.db     — SQLite-Datenbank (wird automatisch erstellt)
 - **Datenbank:** SQLite mit WAL-Modus
 - **Frontend:** Eingebettetes SPA, keine Build-Pipeline nötig
 - **Port:** 8671
+
+## Credits
+
+The 3D molar of the loading spinner (`js/molar-mesh.js`, built with `tools/molar/convert.js`) is based on BodyParts3D, © The Database Center for Life Science, licensed under [CC Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/).

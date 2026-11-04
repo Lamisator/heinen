@@ -367,7 +367,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <audio id="bg-audio" preload="auto" loop></audio>
 <audio id="gen-audio" preload="auto" loop></audio>
 <script src="/js/qrcode.min.js"></script>
-<script src="/js/zdog.min.js"></script>
+<script src="/js/molar-mesh.js"></script>
 <script src="/js/tooth3d.js"></script>
 <script>
 let ws=null,myId='',inviteCode='',gameState=null,selectedAnswer=-1,timerInterval=null,currentTimeLeft=0,shuffleAnimating=false;

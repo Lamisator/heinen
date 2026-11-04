@@ -1,0 +1,95 @@
+// OBJ (BodyParts3D) -> compact mesh JS for heinen js/molar-mesh.js
+// Source: BodyParts3D isa_BP3D_4.0_obj_99.zip (https://dbarchive.biosciencedbc.jp/data/bodyparts3d/LATEST/), file FJ1261.obj
+// Build: node tools/molar/convert.js FJ1261.obj js/molar-mesh.js 1
+// usage: node convert.js in.obj out.js [subdivLevels]
+const fs = require('fs');
+const [, , inp, out, lv] = process.argv;
+const levels = +(lv || 1);
+const src = fs.readFileSync(inp, 'utf8').split('\n');
+let P = [], F = [];
+for (const l of src) {
+  const t = l.trim().split(/\s+/);
+  if (t[0] === 'v') P.push([+t[1], +t[2], +t[3]]);
+  else if (t[0] === 'f') {
+    const ix = t.slice(1).map(s => parseInt(s) - 1);
+    for (let k = 1; k + 1 < ix.length; k++) F.push([ix[0], ix[k], ix[k + 1]]);
+  }
+}
+// weld duplicates
+const key = p => p.map(v => v.toFixed(4)).join(',');
+const map = new Map(), remap = [], NP = [];
+P.forEach((p, i) => { const k = key(p); if (!map.has(k)) { map.set(k, NP.length); NP.push(p); } remap[i] = map.get(k); });
+P = NP; F = F.map(f => f.map(i => remap[i])).filter(f => f[0] !== f[1] && f[1] !== f[2] && f[0] !== f[2]);
+
+function edges(F) {
+  const E = new Map();
+  F.forEach((f, fi) => { for (let k = 0; k < 3; k++) { const a = f[k], b = f[(k + 1) % 3]; const e = a < b ? a + '_' + b : b + '_' + a; if (!E.has(e)) E.set(e, []); E.get(e).push(fi); } });
+  return E;
+}
+let E = edges(F);
+let bad = 0; for (const [, v] of E) if (v.length !== 2) bad++;
+console.error('verts', P.length, 'faces', F.length, 'non-manifold/boundary edges', bad);
+
+// Loop subdivision
+function loop(P, F) {
+  const E = edges(F), nb = P.map(() => new Set());
+  F.forEach(f => { for (let k = 0; k < 3; k++) { nb[f[k]].add(f[(k + 1) % 3]); nb[f[k]].add(f[(k + 2) % 3]); } });
+  const NP = P.map((p, i) => {
+    const n = [...nb[i]], m = n.length;
+    const beta = m === 3 ? 3 / 16 : 3 / (8 * m);
+    const r = p.map(v => v * (1 - m * beta));
+    n.forEach(j => { for (let c = 0; c < 3; c++) r[c] += P[j][c] * beta; });
+    return r;
+  });
+  const eidx = new Map();
+  for (const [e, fs] of E) {
+    const [a, b] = e.split('_').map(Number);
+    let r;
+    if (fs.length === 2) {
+      const opp = fs.map(fi => F[fi].find(v => v !== a && v !== b));
+      r = [0, 1, 2].map(c => 3 / 8 * (P[a][c] + P[b][c]) + 1 / 8 * (P[opp[0]][c] + P[opp[1]][c]));
+    } else r = [0, 1, 2].map(c => (P[a][c] + P[b][c]) / 2);
+    eidx.set(e, NP.length); NP.push(r);
+  }
+  const ek = (a, b) => eidx.get(a < b ? a + '_' + b : b + '_' + a);
+  const NF = [];
+  F.forEach(([a, b, c]) => { const ab = ek(a, b), bc = ek(b, c), ca = ek(c, a); NF.push([a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]); });
+  return [NP, NF];
+}
+for (let i = 0; i < levels; i++) [P, F] = loop(P, F);
+
+// orient: z is long axis; upper molar has crown at low z -> flip so crown is +y (up)
+let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+P.forEach(p => p.forEach((v, c) => { mn[c] = Math.min(mn[c], v); mx[c] = Math.max(mx[c], v); }));
+const ctr = mn.map((v, c) => (v + mx[c]) / 2), h = mx[2] - mn[2];
+const flip = process.env.FLIP !== '0';
+P = P.map(p => {
+  const x = (p[0] - ctr[0]) / h * 2, y = (p[1] - ctr[1]) / h * 2, z = (p[2] - ctr[2]) / h * 2;
+  return flip ? [x, -z, y] : [x, z, -y];
+});
+if (flip) F = F.map(f => f); // mirroring y<->z swap + sign keeps handedness? checked below
+// winding: make normals point outward (signed volume > 0)
+let vol = 0; F.forEach(([a, b, c]) => { const A = P[a], B = P[b], C = P[c]; vol += A[0] * (B[1] * C[2] - B[2] * C[1]) - A[1] * (B[0] * C[2] - B[2] * C[0]) + A[2] * (B[0] * C[1] - B[1] * C[0]); });
+if (vol < 0) F = F.map(([a, b, c]) => [a, c, b]);
+// smooth normals (area weighted)
+const N = P.map(() => [0, 0, 0]);
+F.forEach(([a, b, c]) => {
+  const u = P[b].map((v, k) => v - P[a][k]), w = P[c].map((v, k) => v - P[a][k]);
+  const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+  [a, b, c].forEach(i => { for (let k = 0; k < 3; k++) N[i][k] += n[k]; });
+});
+N.forEach(n => { const l = Math.hypot(...n) || 1; for (let k = 0; k < 3; k++) n[k] /= l; });
+let ymin = 1e9, ymax = -1e9; P.forEach(p => { ymin = Math.min(ymin, p[1]); ymax = Math.max(ymax, p[1]); });
+console.error('out verts', P.length, 'faces', F.length, 'y', ymin.toFixed(3), ymax.toFixed(3));
+
+const pos = new Int16Array(P.length * 3), nor = new Int8Array(P.length * 3), idx = new Uint16Array(F.length * 3);
+P.forEach((p, i) => p.forEach((v, k) => pos[i * 3 + k] = Math.round(v * 32000)));
+N.forEach((n, i) => n.forEach((v, k) => nor[i * 3 + k] = Math.round(v * 127)));
+F.forEach((f, i) => f.forEach((v, k) => idx[i * 3 + k] = v));
+const b64 = a => Buffer.from(a.buffer).toString('base64');
+fs.writeFileSync(out,
+  '// Human upper first molar (FMA55699), from BodyParts3D, (c) The Database Center for Life Science,\n' +
+  '// licensed under CC Attribution 4.0 International (https://creativecommons.org/licenses/by/4.0/).\n' +
+  '// Changed: centred, scaled, crown turned up, Loop-subdivided, quantised. Generated by a converter script.\n' +
+  'window.MOLAR_MESH={scale:' + (1 / 32000) + ',p:"' + b64(pos) + '",n:"' + b64(nor) + '",i:"' + b64(idx) + '"};\n');
+console.error('bytes', fs.statSync(out).size);

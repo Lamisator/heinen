@@ -1,80 +1,120 @@
-// Zdog-based 3D molar spinner. Replaces the flat rotating SVG (which vanished to
-// a line at 90°). Real geometry: crown = bottom dome + cylinder + top dome, with
-// four cusps on top and two roots hanging below.
+// WebGL spinner showing a real human upper first molar (mesh from BodyParts3D,
+// see molar-mesh.js for the licence). Replaces the earlier Zdog toy molar. Needs
+// molar-mesh.js loaded first; falls back to nothing if WebGL is unavailable.
 (function () {
-  var TAU = Zdog.TAU;
+  var VS = [
+    'attribute vec3 aPos;attribute vec3 aNor;',
+    'uniform mat4 uMV;uniform mat4 uP;',
+    'varying vec3 vN;varying vec3 vV;varying float vY;',
+    'void main(){vec4 p=uMV*vec4(aPos,1.0);vN=mat3(uMV)*aNor;vV=-p.xyz;vY=aPos.y;gl_Position=uP*p;}'
+  ].join('\n');
 
-  var COL = {
-    enamel:      '#f5ebd2',
-    enamelBack:  '#c9b98f',
-    cusp:        '#fbf3d9',
-    cuspBack:    '#d5c69c',
-    root:        '#e8d9b0',
-    rootBack:    '#b5a577',
-    fissure:     '#8b7a55'
-  };
+  // Enamel crown blending into a yellower, matte root below the cemento-enamel
+  // junction. Wrap lighting + soft rim fakes the translucency of enamel.
+  var FS = [
+    'precision mediump float;',
+    'varying vec3 vN;varying vec3 vV;varying float vY;',
+    'void main(){',
+    ' vec3 n=normalize(vN);vec3 v=normalize(vV);',
+    ' if(!gl_FrontFacing)n=-n;',
+    ' vec3 L1=normalize(vec3(-0.5,0.8,0.7));vec3 L2=normalize(vec3(0.7,0.1,0.4));vec3 L3=normalize(vec3(0.0,-0.6,-0.8));',
+    ' float cej=smoothstep(-0.06,0.16,vY);',
+    ' vec3 enamel=vec3(0.95,0.93,0.86);vec3 root=vec3(0.88,0.8,0.64);',
+    ' vec3 base=mix(root,enamel,cej);',
+    ' float w=0.35;',
+    ' float d1=max((dot(n,L1)+w)/(1.0+w),0.0);float d2=max((dot(n,L2)+w)/(1.0+w),0.0);float d3=max(dot(n,L3),0.0);',
+    ' vec3 col=base*(0.22+0.78*d1+0.28*d2)+vec3(1.0,0.85,0.6)*0.18*d3;',
+    ' float gloss=mix(18.0,70.0,cej);float ks=mix(0.08,0.45,cej);',
+    ' vec3 h1=normalize(L1+v);vec3 h2=normalize(L2+v);',
+    ' col+=ks*(pow(max(dot(n,h1),0.0),gloss)+0.4*pow(max(dot(n,h2),0.0),gloss));',
+    ' float rim=pow(1.0-max(dot(n,v),0.0),3.0);',
+    ' col+=rim*mix(vec3(0.25,0.2,0.12),vec3(0.35,0.36,0.4),cej);',
+    ' col*=1.0-0.18*smoothstep(-0.4,-1.0,vY);',
+    ' gl_FragColor=vec4(pow(col,vec3(0.95)),1.0);',
+    '}'
+  ].join('\n');
 
-  function buildTooth(illo) {
-    var tooth = new Zdog.Group({ addTo: illo });
+  function b64(s, Type) {
+    var bin = atob(s), u8 = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Type(u8.buffer);
+  }
 
-    // Roots — two cones tapering downward. Base sits buried inside the crown
-    // capsule so the flat base disc is hidden by the crown's curved surface.
-    // Cone default: base at origin, apex at +z=length. rotate.x = -TAU/4
-    // turns +z into +y (down in screen coords).
-    [-1, 1].forEach(function (sign) {
-      new Zdog.Cone({
-        addTo: tooth,
-        diameter: 26,
-        length: 60,
-        stroke: false,
-        color: COL.root,
-        backface: COL.rootBack,
-        translate: { x: sign * 14, y: 24 },
-        rotate: { x: -TAU / 4 }
-      });
-    });
+  var meshData = null;
+  function getMesh() {
+    if (!meshData && window.MOLAR_MESH) {
+      var m = window.MOLAR_MESH;
+      meshData = { p: b64(m.p, Int16Array), n: b64(m.n, Int8Array), i: b64(m.i, Uint16Array) };
+    }
+    return meshData;
+  }
 
-    // Crown — a single capsule (Shape with thick stroke). This is one continuous
-    // primitive, no seams from cylinder/hemisphere junctions.
-    new Zdog.Shape({
-      addTo: tooth,
-      path: [{ y: -14 }, { y: 14 }],
-      stroke: 78,
-      color: COL.enamel,
-      backface: COL.enamelBack
-    });
+  function persp(fov, aspect, near, far) {
+    var f = 1 / Math.tan(fov / 2), nf = 1 / (near - far);
+    return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
+  }
 
-    // Four cusps as spheres (Shape with stroke, no path length = sphere) sitting
-    // on top of the crown. Overlap with the crown gives an organic bump.
-    var cusps = [
-      { x: -16, z: -16 },
-      { x:  16, z: -16 },
-      { x: -16, z:  16 },
-      { x:  16, z:  16 }
+  // model-view: scale, spin about y, tilt about x, push back along -z
+  function modelView(spin, tilt, s, dist, dy) {
+    var cy = Math.cos(spin), sy = Math.sin(spin), cx = Math.cos(tilt), sx = Math.sin(tilt);
+    // R = Rx(tilt) * Ry(spin), column-major
+    return [
+      s * cy, s * sx * sy, -s * cx * sy, 0,
+      0, s * cx, s * sx, 0,
+      s * sy, -s * sx * cy, s * cx * cy, 0,
+      0, dy, -dist, 1
     ];
-    cusps.forEach(function (c) {
-      new Zdog.Shape({
-        addTo: tooth,
-        stroke: 28,
-        translate: { x: c.x, y: -46, z: c.z },
-        color: COL.cusp,
-        backface: COL.cuspBack
-      });
-    });
+  }
 
-    return tooth;
+  function compile(gl, type, src) {
+    var sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    return sh;
+  }
+
+  function setupGL(canvas, mesh) {
+    var gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: true });
+    if (!gl) return null;
+    var prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+    function attr(name, data, type, norm) {
+      var b = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      var loc = gl.getAttribLocation(prog, name);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 3, type, norm, 0, 0);
+    }
+    attr('aPos', mesh.p, gl.SHORT, true);
+    attr('aNor', mesh.n, gl.BYTE, true);
+    var ib = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.i, gl.STATIC_DRAW);
+    gl.enable(gl.DEPTH_TEST);
+    gl.clearColor(0, 0, 0, 0);
+    return {
+      gl: gl, count: mesh.i.length,
+      uMV: gl.getUniformLocation(prog, 'uMV'),
+      uP: gl.getUniformLocation(prog, 'uP')
+    };
   }
 
   function mount(el) {
     var isMini = el.classList.contains('tooth-spinner-mini');
     var size = isMini ? 150 : 220;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-    // Zdog reads canvas.width/height as CSS pixels and internally scales the
-    // backing store by devicePixelRatio (see setSizeCanvas). So we pass CSS size.
     var canvas = document.createElement('canvas');
     canvas.className = 'tooth-canvas';
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
 
     var stage = document.createElement('div');
     stage.className = 'tooth-stage';
@@ -93,23 +133,27 @@
     el.innerHTML = '';
     el.appendChild(stage);
 
-    var illo = new Zdog.Illustration({
-      element: canvas,
-      zoom: size / 260,
-      rotate: { x: -0.32 },
-      translate: { y: -30 }
-    });
+    var mesh = getMesh();
+    var r = null;
+    try { r = mesh && setupGL(canvas, mesh); } catch (e) { r = null; }
+    if (!r) return;
+    var gl = r.gl;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniformMatrix4fv(r.uP, false, persp(0.5, 1, 0.1, 20));
 
-    var tooth = buildTooth(illo);
-
-    function frame() {
+    var spin = 0, last = 0;
+    function frame(t) {
       if (canvas.offsetParent !== null) {
-        tooth.rotate.y += 0.025;
-        illo.updateRenderGraph();
+        var dt = last ? Math.min(t - last, 100) : 16;
+        spin += dt * 0.0015;
+        gl.uniformMatrix4fv(r.uMV, false, modelView(spin, 0.3, 0.78, 4.6, 0.02));
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.drawElements(gl.TRIANGLES, r.count, gl.UNSIGNED_SHORT, 0);
       }
+      last = t;
       requestAnimationFrame(frame);
     }
-    frame();
+    requestAnimationFrame(frame);
   }
 
   function mountAll() {
