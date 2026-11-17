@@ -103,7 +103,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 </div>
 <div class="pst">Offene Lobbys</div>
 <div id="lobby-list"><div style="color:var(--text2);text-align:center;padding:20px">Keine offenen Lobbys vorhanden.</div></div>
-<div style="margin-top:10px;text-align:center"><div class="ig"><label>Beitritt per Einladungscode</label><div style="display:flex;gap:8px"><input type="text" id="home-invite" placeholder="Code eingeben..." style="flex:1"/><button class="btn btn-sm btn-p" onclick="joinByCode()">Beitreten</button></div></div></div>
+<div style="margin-top:10px;text-align:center"><div class="ig"><label>Beitritt per Einladungscode</label><div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="home-invite" placeholder="Code eingeben..." style="flex:1;min-width:140px"/><button class="btn btn-sm btn-p" onclick="joinByCode()">Beitreten</button><button class="btn btn-sm btn-s" onclick="watchByCode()" title="Ohne Platz am Tisch zuschauen">&#128065; Nur zuschauen</button></div></div></div>
 <div class="pst" style="margin-top:30px">Spielanleitung</div>
 <div class="tutorial-content" id="home-tutorial"></div>
 </div></div>
@@ -207,12 +207,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div id="screen-join" class="screen"><div class="login-container"><div class="login-title">Spiel beitreten</div>
 <div class="ig"><label>Dein Name</label><input type="text" id="join-name" placeholder="Name..." maxlength="20"/></div>
 <div class="ig" id="join-pw-group" style="display:none"><label>Lobby-Passwort</label><input type="password" id="join-pw"/></div>
+<div id="join-running" style="display:none;background:rgba(255,215,0,.08);border:1px solid rgba(255,215,0,.3);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.8rem;color:var(--text2);text-align:center">Das Spiel läuft gerade. Du kannst zuschauen und dich in der nächsten Lobby dazusetzen.</div>
 <button class="btn btn-p" onclick="doJoin()">Beitreten</button>
+<button class="btn btn-s" onclick="doWatch()" style="margin-top:10px">&#128065; Nur zuschauen</button>
 <button class="btn btn-s" onclick="goHome()" style="margin-top:10px">Zurück</button></div></div>
 
 <div id="screen-lobby" class="screen"><div class="lobby-container">
 <div class="gcd"><div class="gcl">Einladungslink</div><div class="il" id="invite-link" onclick="copyInvite()"></div>
 <div style="font-size:.6rem;color:var(--text2);margin-top:6px">Klicken zum Kopieren</div>
+<div style="font-size:.7rem;margin-top:8px"><a href="#" onclick="copyWatchLink();return false" style="color:var(--text2)">&#128065; Zuschau-Link kopieren (ohne Platz am Tisch)</a></div>
 <div id="qr-code" style="margin:16px auto 0;display:inline-block"></div></div>
 <div id="lobby-settings"></div>
 <div class="pst" id="players-count">Spieler*innen (0)</div>
@@ -238,7 +241,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <div style="font-size:3rem;margin-bottom:16px">&#9888;</div>
 <div style="font-size:1.3rem;font-weight:700;color:var(--wrong);margin-bottom:14px">Fehler bei der Fragengenerierung</div>
 <div id="error-msg" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px;color:var(--text2);font-size:.85rem;font-family:'Space Mono',monospace;word-break:break-word"></div>
-<button class="btn btn-p" onclick="leaveGame()" style="max-width:280px;margin:0 auto">Zur Lobby zurückkehren</button>
+<button class="btn btn-p" id="error-back" onclick="watching?goHome():leaveGame()" style="max-width:280px;margin:0 auto">Zur Lobby zurückkehren</button>
 </div></div>
 </div>
 
@@ -372,6 +375,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 <script>
 let ws=null,myId='',inviteCode='',gameState=null,selectedAnswer=-1,timerInterval=null,currentTimeLeft=0,shuffleAnimating=false;
 let appConfig={},currentUser=null,joinPending='',joinNeedsPw=false,joinLobbyPw='';
+let watching=false,watchPw=''; // Zuschauer*in ohne Platz (/w/CODE)
 let globalSounds={},bgMuted=false,bgStarted=false,tutorialHtml='';
 const DL={leicht:'Leicht',mittel:'Mittel',schwer:'Schwer',extrem:'Extrem'};
 const ML={classic:'Klassisch',elimination:'Elimination',kfo_battle_royale:'KFO Battle Royale',kfo_singleplayer:'KFO Singleplayer'};
@@ -395,6 +399,8 @@ async function apiFetch(url,opts={}){const method=opts.method||'GET';const heade
   await loadSounds();await loadTutorial();
   if(location.pathname==='/m'){try{const r=await fetch('/api/me');if(r.ok)currentUser=await r.json()}catch(e){}updateNav();movePage();return}
   if(inv){joinPending=inv;showScreen('join');return}
+  const wm=location.pathname.match(/^\/w\/([A-Za-z0-9]{1,16})\/?$/);
+  if(wm){try{const r=await fetch('/api/me');if(r.ok)currentUser=await r.json()}catch(e){}updateNav();startWatch(wm[1].toLowerCase(),'');return}
   // Try auto-reconnect
   const ri=sessionStorage.getItem('h_invite'),rn=sessionStorage.getItem('h_name');
   if(ri&&rn){connectWS();const ck=setInterval(()=>{if(ws&&ws.readyState===1){clearInterval(ck);send('reconnect',{Name:rn,InviteCode:ri})}},100)}
@@ -406,7 +412,7 @@ async function loadSounds(){try{const r=await fetch('/api/global-sounds');const 
 async function loadTutorial(){try{const r=await fetch('/api/tutorial');const d=await r.json();tutorialHtml=markdownToHtml(d.content||'')}catch(e){}}
 async function loadLobbies(){try{const r=await fetch('/api/lobbies');const lobbies=await r.json();const el=document.getElementById('lobby-list');
   if(!lobbies||lobbies.length===0){el.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px">Keine offenen Lobbys vorhanden.</div>';return}
-  el.innerHTML=lobbies.map(l=>'<div class="lobby-card"><div class="lc-info"><div class="lc-name">'+esc(l.lobbyName)+' <span class="lc-badge '+(l.lobbyMode==='open'?'open':'pw')+'">'+(l.lobbyMode==='open'?'Offen':'Passwort')+'</span></div><div class="lc-details">'+esc(l.topic)+' \u2022 '+(ML[l.mode]||l.mode)+' \u2022 '+l.players+' Spieler*in(nen)</div></div><button class="btn btn-sm btn-p" onclick="joinLobby(\''+l.inviteCode+'\',\''+(l.lobbyMode==='password'?'pw':'open')+'\')">Beitreten</button></div>').join('')
+  el.innerHTML=lobbies.map(l=>'<div class="lobby-card"><div class="lc-info"><div class="lc-name">'+esc(l.lobbyName)+' <span class="lc-badge '+(l.lobbyMode==='open'?'open':'pw')+'">'+(l.lobbyMode==='open'?'Offen':'Passwort')+'</span></div><div class="lc-details">'+esc(l.topic)+' \u2022 '+(ML[l.mode]||l.mode)+' \u2022 '+l.players+' Spieler*in(nen)'+(l.running?' \u2022 l\u00e4uft':'')+(l.watchers?' \u2022 \u{1F441} '+l.watchers:'')+'</div></div><div style="display:flex;gap:6px">'+(l.running?'':'<button class="btn btn-sm btn-p" onclick="joinLobby(\''+l.inviteCode+'\',\''+(l.lobbyMode==='password'?'pw':'open')+'\')">Beitreten</button>')+(l.watch?'<button class="btn btn-sm btn-s" title="Nur zuschauen" onclick="watchLobby(\''+l.inviteCode+'\',\''+(l.lobbyMode==='password'?'pw':'open')+'\')">&#128065;'+(l.running?' Zuschauen':'')+'</button>':'')+'</div></div>').join('')
 }catch(e){}}
 
 function markdownToHtml(md){md=md.replace(/\\\*/g,'\u2605STAR\u2605');md=md.replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^# (.+)$/gm,'<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/(<li>[\s\S]*?<\/li>)/g,function(m){return '<ul>'+m+'</ul>'}).replace(/<\/ul>\s*<ul>/g,'').replace(/^(?!<[hulo])(.*\S.*)$/gm,'<p>$1</p>');md=md.replace(/\u2605STAR\u2605/g,'*');return md}
@@ -431,7 +437,8 @@ function forceLoggedOut(){if(!currentUser)return;currentUser=null;updateNav();
   if(['dashboard','passkeys','pw','admin','create'].includes(name))showScreen('login');
   showToast('Du wurdest abgemeldet \u2013 bitte erneut anmelden.',1)}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkSession()});
-function goHome(){hideQuestions();if(gameState&&['question','results','intro','loading','refill','tutorial'].includes(gameState.phase)){if(!confirm('Spiel wirklich verlassen?'))return}
+function goHome(){hideQuestions();if(!watching&&gameState&&['question','results','intro','loading','refill','tutorial'].includes(gameState.phase)){if(!confirm('Spiel wirklich verlassen?'))return}
+  watching=false;watchPw='';sessionStorage.removeItem('h_watch');
   gameState=null;stopBg();stopGenSound();if(ws){try{ws.close()}catch(e){}}ws=null;myId='';inviteCode='';sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');
   history.replaceState(null,'','/');showScreen('home');updateNav();loadLobbies()}
 function showScreen(name){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));const el=document.getElementById('screen-'+name);if(el)el.classList.add('active');
@@ -1319,20 +1326,42 @@ let wsKeepalive=null;
 function connectWS(){if(ws&&ws.readyState<=1)return;const proto=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(proto+'//'+location.host+'/ws');
   ws.onopen=()=>{if(wsKeepalive)clearInterval(wsKeepalive);wsKeepalive=setInterval(()=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'ping',payload:null}))},20000)};
   ws.onclose=()=>{if(wsKeepalive){clearInterval(wsKeepalive);wsKeepalive=null}
+    // Zuschauer*in: Verbindung verloren -> erneut zuschauen
+    const rw=watching?sessionStorage.getItem('h_watch'):'';watching=false;
+    if(rw){setTimeout(()=>{if(sessionStorage.getItem('h_watch')===rw&&!watching)startWatch(rw,watchPw)},2000);return}
     // Auto-reconnect if we have session info
     const ri=sessionStorage.getItem('h_invite'),rn=sessionStorage.getItem('h_name');
     if(ri&&rn){setTimeout(()=>{connectWS();const ck=setInterval(()=>{if(ws&&ws.readyState===1){clearInterval(ck);send('reconnect',{Name:rn,InviteCode:ri})}},100)},2000)}};
   ws.onerror=()=>{};ws.onmessage=e=>{try{handleMessage(JSON.parse(e.data))}catch(ex){}}}
 function send(t,p){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:t,payload:p}))}
 function handleMessage(msg){switch(msg.type){
-  case 'joined':case 'reconnected':myId=msg.payload.playerId;inviteCode=msg.payload.inviteCode;sessionStorage.setItem('h_invite',inviteCode);break;
-  case 'state':gameState=msg.payload;if(!shuffleAnimating)renderGame();break;case 'error':showToast(msg.payload.message,1);break;
+  case 'joined':case 'reconnected':if(watching){watching=false;sessionStorage.removeItem('h_watch');lastPhase='';history.replaceState(null,'','/')}myId=msg.payload.playerId;inviteCode=msg.payload.inviteCode;sessionStorage.setItem('h_invite',inviteCode);break;
+  case 'watching':watching=true;myId='';selectedAnswer=-1;lastPhase='';inviteCode=msg.payload.inviteCode;sessionStorage.setItem('h_watch',inviteCode);history.replaceState(null,'','/w/'+inviteCode);break;
+  case 'watchers':if(gameState){gameState.watchers=msg.payload.count||0;updateWatchCounts()}break;
+  case 'unwatched':showToast(msg.payload.message||'Zuschauen beendet',1);watching=false;watchPw='';sessionStorage.removeItem('h_watch');gameState=null;stopBg();stopGenSound();clearTimer();history.replaceState(null,'','/');showScreen('home');loadLobbies();break;
+  case 'state':gameState=msg.payload;if(!shuffleAnimating)renderGame();break;
+  case 'error':showToast(msg.payload.message,1);handleErrorCode(msg.payload.code);break;
   case 'kicked':showToast(msg.payload.message,1);gameState=null;stopBg();stopGenSound();sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');showScreen('home');break;
   case 'shuffle_animation':shuffleAnimation(msg.payload);break;
   case 'moved':sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name');stopBg();stopGenSound();showToast('Umzug nach '+(msg.payload.game||'…')+' \u2026',0);try{ws.close()}catch(e){}location.href=msg.payload.url;break}}
 
-function joinLobby(code,mode){joinPending=code;joinNeedsPw=mode==='pw';document.getElementById('join-pw-group').style.display=joinNeedsPw?'block':'none';showScreen('join')}
-function joinByCode(){const code=document.getElementById('home-invite').value.trim();if(!code){showToast('Code eingeben',1);return};joinPending=code;joinNeedsPw=false;document.getElementById('join-pw-group').style.display='none';showScreen('join')}
+function joinLobby(code,mode){joinPending=code;joinNeedsPw=mode==='pw';document.getElementById('join-pw-group').style.display=joinNeedsPw?'block':'none';document.getElementById('join-running').style.display='none';showScreen('join')}
+function joinByCode(){const code=document.getElementById('home-invite').value.trim();if(!code){showToast('Code eingeben',1);return};joinPending=code;joinNeedsPw=false;document.getElementById('join-pw-group').style.display='none';document.getElementById('join-running').style.display='none';showScreen('join')}
+// Zuschauen ohne Platz: eigener WebSocket-Modus, der Server lässt keine Aktionen zu
+function watchByCode(){const code=document.getElementById('home-invite').value.trim();if(!code){showToast('Code eingeben',1);return}startWatch(code.toLowerCase(),'')}
+function watchLobby(code,mode){if(mode==='pw'){joinLobby(code,'pw');return}startWatch(code,'')}
+function doWatch(){if(!joinPending)return;startWatch(joinPending.toLowerCase(),joinNeedsPw?document.getElementById('join-pw').value:'')}
+function startWatch(code,pw){joinPending=code;watchPw=pw;sessionStorage.setItem('h_watch',code);connectWS();const ck=setInterval(()=>{if(ws&&ws.readyState===1){clearInterval(ck);send('watch_game',{InviteCode:code,Password:pw})}},100)}
+function sitDown(){const el=document.getElementById('sit-name'),name=el?el.value.trim():'';if(!name){showToast('Namen eingeben',1);return}sessionStorage.setItem('h_name',name);send('join_game',{Name:name,InviteCode:inviteCode,Password:watchPw})}
+function copyWatchLink(){navigator.clipboard.writeText(location.origin+'/w/'+inviteCode).then(()=>showToast('Zuschau-Link kopiert!',0))}
+function handleErrorCode(c){if(!c)return;
+  if(c==='password'){joinNeedsPw=true;document.getElementById('join-pw-group').style.display='block';showScreen('join')}
+  else if(c==='running'&&!watching){document.getElementById('join-running').style.display='block';showScreen('join')}
+  else if(!watching&&(c==='no_watch'||c==='watch_full'||c==='not_found')){sessionStorage.removeItem('h_watch');if(location.pathname.startsWith('/w/')){history.replaceState(null,'','/');showScreen('home');loadLobbies()}}}
+function watchSuffix(){const n=(gameState&&gameState.watchers)||0;return n?' \u2022 \u{1F441} '+n+' '+(n===1?'schaut':'schauen')+' zu':''}
+function lobbyCountText(){const ps=gameState.players||[],nSpec=ps.filter(p=>p.spectator).length;return 'Spieler*innen ('+(ps.length-nSpec)+')'+(nSpec?' \u2022 Zuschauer*innen ('+nSpec+')':'')+watchSuffix()}
+function gameTitleText(){const ps=gameState.players||[],nSpecG=ps.filter(p=>p.spectator).length;return 'Spieler*innen ('+ps.filter(p=>p.alive).length+' aktiv)'+(nSpecG?' \u2022 '+nSpecG+' Zuschauer*innen':'')+watchSuffix()}
+function updateWatchCounts(){if(!gameState)return;const ph=gameState.phase;if(ph==='lobby')document.getElementById('players-count').textContent=lobbyCountText();else if(ph==='question'||ph==='results')document.getElementById('game-players-title').textContent=gameTitleText()}
 function createGame(){const name=document.getElementById('host-name').value.trim();if(!name){showToast('Namen eingeben',1);return}
   if(!currentUser&&!(appConfig.hub&&appConfig.hub.open)){showToast('Bitte zuerst anmelden',1);return}
   sessionStorage.setItem('h_name',name);connectWS();const check=setInterval(()=>{if(ws&&ws.readyState===1){clearInterval(check);send('create_game',{Name:name,Username:currentUser?currentUser.username:''});
@@ -1359,13 +1388,14 @@ function sendLS(){
   if(!isDelegated){const tc=document.getElementById('l-tutorial');if(tc)s.ShowTutorial=tc.checked;
   const ws2=document.getElementById('l-websearch');if(ws2)s.WebSearch=ws2.checked;
   const pi=document.getElementById('l-playintro');if(pi)s.PlayIntro=pi.checked;
-  const ac=document.getElementById('l-allowchange');if(ac)s.AllowAnswerChange=ac.checked;}
+  const ac=document.getElementById('l-allowchange');if(ac)s.AllowAnswerChange=ac.checked;
+  const aw=document.getElementById('l-allowwatch');if(aw)s.NoWatch=!aw.checked;}
   send('update_settings',s)}
 
-function amISpectator(){if(!gameState)return false;const me=gameState.players.find(p=>p.id===myId);return !!(me&&me.spectator)}
+function amISpectator(){if(watching)return true;if(!gameState)return false;const me=gameState.players.find(p=>p.id===myId);return !!(me&&me.spectator)}
 function toggleSpectator(){send('set_spectator',{spectator:!amISpectator()})}
 function spectatorCard(p,extraCls,showMe){return '<div class="pc spectating'+(extraCls||'')+'"><div class="pn">'+esc(p.name)+(showMe&&p.id===myId?' (Du)':'')+'</div><div class="ps spec">&#128065; Zuschauer*in</div><div class="spec-icon">&#128064;</div></div>'}
-function amIAlive(){if(!gameState)return true;const me=gameState.players.find(p=>p.id===myId);return me?me.alive:true}
+function amIAlive(){if(watching)return false;if(!gameState)return true;const me=gameState.players.find(p=>p.id===myId);return me?me.alive:true}
 
 function delegateSettings(pid){send('delegate_settings',{playerId:pid})}
 
@@ -1417,7 +1447,7 @@ function renderGame(){if(!gameState)return;const ph=gameState.phase,isHost=myId=
     else if(gameState.allCorrect)playSound(globalSounds.allcorrectSound,globalSounds.volAllcorrect);
     else if(gameState.someoneLost)playSound(globalSounds.wrongSound,globalSounds.volWrong)}
   else if(ph==='end'){clearTimer();showScreen('end');renderEnd(isHost);stopBg()}
-  else if(ph==='error'){clearTimer();stopBg();showScreen('error');document.getElementById('error-msg').textContent=gameState.errorMsg||'Unbekannter Fehler'}
+  else if(ph==='error'){clearTimer();stopBg();showScreen('error');document.getElementById('error-back').textContent=watching?'Zur Startseite':'Zur Lobby zur\u00fcckkehren';document.getElementById('error-msg').textContent=gameState.errorMsg||'Unbekannter Fehler'}
   document.getElementById('host-controls').style.display=(isHost&&(ph==='question'||ph==='results'))?'block':'none';lastPhase=ph}
 
 function renderTutorial(isHost){document.getElementById('tutorial-content').innerHTML=tutorialHtml||'<p>Lade Tutorial...</p>';document.getElementById('tutorial-actions').innerHTML=isHost?'<button class="btn btn-p" onclick="skipTutorial()" style="max-width:280px">Weiter</button>':'<div style="color:var(--text2);font-size:.85rem">Warte auf den*die Host...</div>'}
@@ -1463,6 +1493,7 @@ function renderLobby(isHost){
       +'<div class="ig"><label>Optionen</label><select id="l-options" onchange="sendLS()">'+oOpts+'</select></div>'
       +'<div class="ig"><label>Z\u00e4hne</label><input type="number" id="l-teeth" value="'+s.numTeeth+'" min="1" max="20" onchange="sendLS()"/></div>'
       +'</div><div class="ig" style="margin-top:8px"><label><input type="checkbox" id="l-tutorial"'+(s.showTutorial?' checked':'')+' onchange="sendLS()"/>Tutorial anzeigen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-playintro"'+(s.playIntro!==false?' checked':'')+' onchange="sendLS()"/>Intro-Sound abspielen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-websearch"'+(s.webSearch?' checked':'')+' onchange="sendLS()"/>Internet-Recherche f\u00fcr Fragen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-allowchange"'+(s.allowAnswerChange!==false?' checked':'')+' onchange="sendLS()"/>Antwort \u00e4nderbar, solange nicht alle geantwortet haben</label></div>'
+      +'<div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-allowwatch"'+(!s.noWatch?' checked':'')+' onchange="sendLS()"/>Zuschauer*innen zulassen (ohne Platz am Tisch)</label></div>'
       +delegateHtml+'</div>';
   }else if(amIDelegated){const isKFO2=s.mode==='kfo_battle_royale'||s.mode==='kfo_singleplayer';
     const dOpts=['leicht','mittel','schwer','extrem'].map(d=>'<option value="'+d+'"'+(s.difficulty===d?' selected':'')+'>'+DL[d]+'</option>').join('');
@@ -1493,7 +1524,7 @@ function renderLobby(isHost){
       +'<div class="sv-item"><span class="sv-label">Z\u00e4hne</span><span class="sv-value">'+s.numTeeth+'</span></div>'
       +'</div></div>'}
   const nSpec=players.filter(p=>p.spectator).length,nPlay=players.length-nSpec;
-  document.getElementById('players-count').textContent='Spieler*innen ('+nPlay+')'+(nSpec?' \u2022 Zuschauer*innen ('+nSpec+')':'');
+  document.getElementById('players-count').textContent=lobbyCountText();
   document.getElementById('lobby-players').innerHTML=players.map(p=>{
     const isH=p.id===gameState.hostId,isMe=p.id===myId,isD=delegatedTo&&p.id===delegatedTo;
     return '<div class="pc'+(p.connected?'':' disconnected')+(isMe?' is-me':'')+(p.spectator?' spectating':'')+'">'
@@ -1503,9 +1534,13 @@ function renderLobby(isHost){
         (isH?'Host':isD?'W\u00e4hlt Thema':(p.connected?'Bereit':'Getrennt'))+(p.spectator?' \u2022 &#128065; Zuschauer*in':'')
       +'</div>'+(p.spectator?'<div class="spec-icon">&#128064;</div>':renderTeeth(p,false,false,false))+'</div>';
   }).join('');
-  const meSpec=amISpectator();
-  document.getElementById('spectate-toggle').innerHTML='<button class="btn btn-s btn-sm" onclick="toggleSpectator()" style="max-width:280px">'+(meSpec?'&#127918; Doch mitspielen':'&#128065; Nur zuschauen')+'</button>'
-    +(isHost&&nPlay===0?'<div style="color:var(--text2);font-size:.8rem;margin-top:8px">Mindestens eine Person muss mitspielen.</div>':'');
+  const tg=document.getElementById('spectate-toggle');
+  if(watching){// Zuschauer*in ohne Platz: Name eingeben und hinsetzen (Formular bleibt bei neuen States stehen)
+    if(!document.getElementById('sit-name')){tg.innerHTML='<div style="color:var(--text2);font-size:.85rem;margin-bottom:8px">&#128065; Du schaust zu, ohne Platz am Tisch.</div><div style="display:flex;gap:8px;max-width:360px;margin:0 auto;align-items:center"><div class="ig" style="flex:1;margin:0"><input type="text" id="sit-name" maxlength="20" placeholder="Dein Name..."/></div><button class="btn btn-p btn-sm" style="width:auto;white-space:nowrap" onclick="sitDown()">&#129681; Platz nehmen</button></div>';
+      const sn=document.getElementById('sit-name');sn.value=sessionStorage.getItem('h_name')||'';sn.onkeydown=e=>{if(e.key==='Enter')sitDown()}}
+  }else{const meSpec=amISpectator();
+  tg.innerHTML='<button class="btn btn-s btn-sm" onclick="toggleSpectator()" style="max-width:320px">'+(meSpec?(isHost?'&#129681; Selbst mitspielen':'&#127918; Doch mitspielen'):(isHost?'&#128065; Nur zuschauen (Gastgeber*in bleiben)':'&#128065; Nur zuschauen'))+'</button>'
+    +(isHost&&nPlay===0?'<div style="color:var(--text2);font-size:.8rem;margin-top:8px">Mindestens eine Person muss mitspielen.</div>':'')}
   document.getElementById('start-btn-container').style.display=(isHost&&nPlay>=1)?'block':'none';
   renderMoveBox('lobby-move',isHost)}
 
@@ -1521,7 +1556,7 @@ function renderResults(){const q=gameState.question,r=gameState.results;if(!q||!
   document.getElementById('q-options').innerHTML=q.options.map((o,i)=>{let c='ob dis';if(i===r.correctAnswer)c+=' correct';else if(selectedAnswer===i)c+=' wrong';return '<button class="'+c+'"><span class="ol">'+L[i]+'</span> '+esc(o)+'</button>'}).join('');
   const my=r.playerResults[myId],info=document.getElementById('results-info');info.style.display='block';
   if(my==='correct')info.innerHTML='<span style="color:var(--correct)">Richtige Antwort!</span>';else if(my==='wrong')info.innerHTML='<span style="color:var(--wrong)">Falsche Antwort – Zahn verloren!</span>';else if(my==='timeout'){info.innerHTML='<span style="color:var(--wrong)">Zeit abgelaufen – Zahn verloren!</span>'}else if(amISpectator())info.innerHTML='<span style="color:var(--text2)">&#128065; Du schaust zu.</span>';else if(!amIAlive())info.innerHTML='<span style="color:var(--text2)">Du bist ausgeschieden.</span>';document.getElementById('q-timer').textContent='\u2014'}
-function renderGamePlayers(isHost){const players=gameState.players||[],ph=gameState.phase;const nSpecG=players.filter(p=>p.spectator).length;document.getElementById('game-players-title').textContent='Spieler*innen ('+players.filter(p=>p.alive).length+' aktiv)'+(nSpecG?' \u2022 '+nSpecG+' Zuschauer*innen':'');
+function renderGamePlayers(isHost){const players=gameState.players||[],ph=gameState.phase;document.getElementById('game-players-title').textContent=gameTitleText();
   let progressHtml='';
   if(ph==='question'){const active=players.filter(p=>p.alive&&p.connected);const answeredCount=active.filter(p=>p.answered).length;const total=active.length;
     const pct=total>0?Math.round(answeredCount/total*100):0;
@@ -1546,7 +1581,7 @@ function renderEnd(isHost){const c=document.getElementById('end-content'),player
   document.getElementById('end-players').innerHTML='<div class="pst">Endergebnis</div><div class="pg">'+sorted.map(p=>{const w=wIds.has(p.id);return '<div class="pc'+(!p.alive?' eliminated':'')+'" style="'+(w?'border-color:var(--gold);box-shadow:0 0 16px rgba(255,215,0,.2)':'')+'"><div class="pn">'+(w?'&#128081; ':'')+esc(p.name)+' <span style="color:var(--text2);font-size:.75rem">('+p.teeth+'/'+p.maxTeeth+')</span></div><div class="ps'+(w?' host':(!p.alive?' elim':''))+'">'+
     (w?'Gewinner*in!':(!p.alive?'Ausgeschieden':'Überlebt'))+'</div>'+renderTeeth(p,false,false,false)+'</div>'}).join('')+specs.map(p=>spectatorCard(p,'',true)).join('')+'</div>';
   renderMoveBox('end-move',isHost);
-  document.getElementById('end-actions').innerHTML=isHost?'<button class="btn btn-p" onclick="playAgain()" style="max-width:280px;margin:0 auto">Nochmal spielen</button>':'<div style="color:var(--text2)">Warte auf den*die Host...</div>';
+  document.getElementById('end-actions').innerHTML=isHost?'<button class="btn btn-p" onclick="playAgain()" style="max-width:280px;margin:0 auto">Nochmal spielen</button>':'<div style="color:var(--text2)">Warte auf den*die Host...'+(watching?'<br><span style="font-size:.8rem">&#128065; Du schaust zu \u2013 sobald die n\u00e4chste Lobby offen ist, kannst du dich dazusetzen.</span>':'')+'</div>';
   sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name')}
 
 function startTimer(){clearTimer();currentTimeLeft=gameState.timeLeft||0;updateTimer();timerInterval=setInterval(()=>{currentTimeLeft--;if(currentTimeLeft<0)currentTimeLeft=0;

@@ -270,6 +270,8 @@ func moveGame(ctx context.Context, g *Game, playerID, target string) error {
 		c.WriteMessage(websocket.TextMessage, d)
 	}
 	g.connMu.Unlock()
+	// Zuschauer*innen ohne Platz ziehen nicht mit (kein reservierter Platz drüben)
+	g.closeWatchers("Die Lobby ist nach " + to.Name + " umgezogen.")
 	logInfo("system", g.HostUser, "GAME_MOVED", fmt.Sprintf("invite=%s to=%s players=%d", code, to.ID, humans))
 	return nil
 }

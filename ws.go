@@ -74,6 +74,23 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	defer close(pingDone)
 
 	var playerID, curInvite string
+	watching := false // Zuschauer*in ohne Platz in curInvite (watch.go)
+	watchIP := anonIP(r)
+	// reply schreibt auf diese Verbindung; als Zuschauer*in unter dem connMu der
+	// Lobby, weil Broadcasts sonst gleichzeitig darauf schreiben könnten.
+	reply := func(code, text string) {
+		if watching {
+			gamesMu.Lock()
+			g, ok := games[curInvite]
+			gamesMu.Unlock()
+			if ok {
+				d, _ := json.Marshal(map[string]interface{}{"type": "error", "payload": map[string]string{"message": text, "code": code}})
+				g.writeTo(conn, d)
+				return
+			}
+		}
+		wsErrorCode(conn, code, text)
+	}
 	for {
 		_, mb, err := conn.ReadMessage()
 		if err != nil {
@@ -88,9 +105,60 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 
+		// Zuschauer*innen dürfen nichts tun außer Platz nehmen oder gehen.
+		if watching && msg.Type != "ping" && msg.Type != "join_game" && msg.Type != "unwatch" {
+			continue
+		}
+
 		switch msg.Type {
 		case "ping":
 			continue
+
+		case "watch_game":
+			if watching || playerID != "" {
+				continue
+			}
+			var p struct{ InviteCode, Password string }
+			json.Unmarshal(msg.Payload, &p)
+			code := strings.ToLower(p.InviteCode)
+			gamesMu.Lock()
+			g, ok := games[code]
+			gamesMu.Unlock()
+			if !ok {
+				wsErrorCode(conn, "not_found", "Spiel nicht gefunden")
+				continue
+			}
+			if g.Settings.LobbyMode == LobbyPassword {
+				if !limiter.CheckLobbyPasswordRate(wsIP) {
+					logWarn(wsIP, "-", "LOBBY_RATE_LIMIT", "invite="+code+" (watch)")
+					wsErrorCode(conn, "rate", "Zu viele Versuche")
+					continue
+				}
+				if !passwordOK(p.Password, g.Settings.LobbyPassword) {
+					if p.Password != "" {
+						logWarn(wsIP, "-", "LOBBY_AUTH_FAIL", "invite="+code+" (watch)")
+					}
+					wsErrorCode(conn, "password", "Falsches Passwort")
+					continue
+				}
+			}
+			hello, _ := json.Marshal(map[string]interface{}{"type": "watching", "payload": map[string]string{"gameId": g.ID, "inviteCode": code}})
+			if ec := g.addWatcher(conn, watchIP, hello); ec != "" {
+				wsErrorCode(conn, ec, watchErrText[ec])
+				continue
+			}
+			watching, curInvite = true, code
+			g.broadcastWatchers()
+			logInfo(wsIP, authUser, "WATCH", fmt.Sprintf("invite=%s watchers=%d", code, g.watchCount.Load()))
+
+		case "unwatch":
+			gamesMu.Lock()
+			g, ok := games[curInvite]
+			gamesMu.Unlock()
+			if ok && g.removeWatcher(conn) {
+				g.broadcastWatchers()
+			}
+			watching, curInvite = false, ""
 
 		case "create_game":
 			var p struct{ Name string }
@@ -126,38 +194,57 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		case "join_game":
 			var p struct{ Name, InviteCode, Password string }
 			json.Unmarshal(msg.Payload, &p)
+			if playerID != "" {
+				continue // schon an einem Tisch
+			}
 			code := strings.ToLower(p.InviteCode)
 			gamesMu.Lock()
 			g, ok := games[code]
 			gamesMu.Unlock()
 			if !ok {
-				wsError(conn, "Spiel nicht gefunden")
+				reply("not_found", "Spiel nicht gefunden")
 				continue
 			}
 			if g.Settings.LobbyMode == LobbyPassword {
 				if !limiter.CheckLobbyPasswordRate(wsIP) {
 					logWarn(wsIP, p.Name, "LOBBY_RATE_LIMIT", "invite="+code)
-					wsError(conn, "Zu viele Versuche")
+					reply("rate", "Zu viele Versuche")
 					continue
 				}
-				if p.Password != g.Settings.LobbyPassword {
-					logWarn(wsIP, p.Name, "LOBBY_AUTH_FAIL", "invite="+code)
-					wsError(conn, "Falsches Passwort")
+				if !passwordOK(p.Password, g.Settings.LobbyPassword) {
+					if p.Password != "" {
+						logWarn(wsIP, p.Name, "LOBBY_AUTH_FAIL", "invite="+code)
+					}
+					reply("password", "Falsches Passwort")
 					continue
 				}
 			}
-			playerID = uuid.New().String()[:12]
-			curInvite = code
-			if !g.addPlayer(playerID, p.Name) {
-				wsError(conn, "Beitritt nicht möglich")
+			newID := uuid.New().String()[:12]
+			if !g.addPlayer(newID, p.Name) {
+				reply("running", "Das Spiel läuft gerade – Beitritt erst in der Lobby. Du kannst zuschauen.")
 				continue
 			}
+			if watching && curInvite != code {
+				// hat woanders zugeschaut: dort abmelden
+				gamesMu.Lock()
+				og, ok := games[curInvite]
+				gamesMu.Unlock()
+				if ok && og.removeWatcher(conn) {
+					og.broadcastWatchers()
+				}
+			}
+			playerID, curInvite = newID, code
 			reconnectToken := issueReconnectToken(playerID, g.ID)
-			g.connMu.Lock()
-			g.connections[playerID] = conn
-			g.connMu.Unlock()
 			d, _ := json.Marshal(map[string]interface{}{"type": "joined", "payload": map[string]string{"playerId": playerID, "gameId": g.ID, "inviteCode": curInvite, "reconnectToken": reconnectToken}})
+			g.connMu.Lock()
+			wasWatching := g.removeWatcherLocked(conn) // Platz genommen
+			g.connections[playerID] = conn
 			conn.WriteMessage(websocket.TextMessage, d)
+			g.connMu.Unlock()
+			watching = false
+			if wasWatching {
+				g.broadcastWatchers()
+			}
 			g.broadcastState()
 
 		case "reconnect":
@@ -205,7 +292,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			var s struct {
 				Topic, Difficulty, StartDifficulty, Mode, LobbyName, LobbyMode, LobbyPassword string
 				NumQuestions, TimePerQ, NumOptions, NumTeeth                                  int
-				ShowTutorial, WebSearch, PlayIntro, AllowAnswerChange                         *bool
+				ShowTutorial, WebSearch, PlayIntro, AllowAnswerChange, NoWatch                *bool
 			}
 			json.Unmarshal(msg.Payload, &s)
 			g.mu.Lock()
@@ -269,8 +356,16 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				if s.AllowAnswerChange != nil {
 					g.Settings.AllowAnswerChange = *s.AllowAnswerChange
 				}
+				if s.NoWatch != nil {
+					g.Settings.NoWatch = *s.NoWatch
+				}
 			}
+			closeWatch := g.Settings.NoWatch
 			g.mu.Unlock()
+			if closeWatch && g.watchCount.Load() > 0 {
+				n := g.closeWatchers("Der*die Host hat das Zuschauen abgeschaltet.")
+				logInfo(wsIP, authUser, "WATCH_OFF", fmt.Sprintf("invite=%s closed=%d", curInvite, n))
+			}
 			g.broadcastState()
 
 		case "kick_player":
@@ -495,7 +590,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			g.mu.Lock()
-			if g.Phase == PhaseError || g.Phase == PhaseEnd {
+			if _, member := g.Players[playerID]; member && (g.Phase == PhaseError || g.Phase == PhaseEnd) {
 				g.Phase = PhaseLobby
 				g.CurrentQ = 0
 				g.Questions = nil
@@ -514,7 +609,14 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Disconnect cleanup
-	if curInvite != "" {
+	if watching {
+		gamesMu.Lock()
+		g, ok := games[curInvite]
+		gamesMu.Unlock()
+		if ok && g.removeWatcher(conn) {
+			g.broadcastWatchers()
+		}
+	} else if curInvite != "" && playerID != "" {
 		gamesMu.Lock()
 		g, ok := games[curInvite]
 		gamesMu.Unlock()

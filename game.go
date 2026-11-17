@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -79,21 +80,22 @@ type Question struct {
 }
 
 type GameSettings struct {
-	Topic           string    `json:"topic"`
-	Difficulty      string    `json:"difficulty"`
-	StartDifficulty string    `json:"startDifficulty"`
-	NumQuestions    int       `json:"numQuestions"`
-	TimePerQ        int       `json:"timePerQuestion"`
-	NumOptions      int       `json:"numOptions"`
-	NumTeeth        int       `json:"numTeeth"`
-	Mode            GameMode  `json:"mode"`
-	ShowTutorial    bool      `json:"showTutorial"`
-	LobbyName       string    `json:"lobbyName"`
-	LobbyMode       LobbyMode `json:"lobbyMode"`
-	LobbyPassword   string    `json:"lobbyPassword"`
-	WebSearch          bool      `json:"webSearch"`
-	PlayIntro          bool      `json:"playIntro"`
-	AllowAnswerChange  bool      `json:"allowAnswerChange"`
+	Topic             string    `json:"topic"`
+	Difficulty        string    `json:"difficulty"`
+	StartDifficulty   string    `json:"startDifficulty"`
+	NumQuestions      int       `json:"numQuestions"`
+	TimePerQ          int       `json:"timePerQuestion"`
+	NumOptions        int       `json:"numOptions"`
+	NumTeeth          int       `json:"numTeeth"`
+	Mode              GameMode  `json:"mode"`
+	ShowTutorial      bool      `json:"showTutorial"`
+	LobbyName         string    `json:"lobbyName"`
+	LobbyMode         LobbyMode `json:"lobbyMode"`
+	LobbyPassword     string    `json:"lobbyPassword"`
+	WebSearch         bool      `json:"webSearch"`
+	PlayIntro         bool      `json:"playIntro"`
+	AllowAnswerChange bool      `json:"allowAnswerChange"`
+	NoWatch           bool      `json:"noWatch"` // keine Zuschauer*innen ohne Platz (watch.go)
 }
 
 type Game struct {
@@ -121,6 +123,8 @@ type Game struct {
 	prefetchFailed                   bool
 	prefetchErr                      string
 	connections                      map[string]*websocket.Conn
+	watchers                         map[*websocket.Conn]string // Zuschauer*innen ohne Platz -> IP (watch.go), unter connMu
+	watchCount                       atomic.Int32
 	connMu                           sync.Mutex
 }
 
@@ -159,6 +163,7 @@ func newGame(hostID, hostName, hostUser string) *Game {
 		Players:     map[string]*Player{hostID: {ID: hostID, Name: hostName, Teeth: 5, MaxTeeth: 5, Alive: true, Answer: -1, Connected: true}},
 		PlayerOrder: []string{hostID},
 		connections: make(map[string]*websocket.Conn),
+		watchers:    make(map[*websocket.Conn]string),
 	}
 }
 
@@ -249,6 +254,7 @@ func cleanupIfEmpty(inviteCode string) {
 		}
 	}
 	delete(games, inviteCode)
+	go g.closeWatchers("Die Lobby wurde geschlossen.")
 	logInfo("system", "system", "GAME_CLEANUP", fmt.Sprintf("invite=%s name=%s (no players)", inviteCode, g.Settings.LobbyName))
 }
 
@@ -703,10 +709,16 @@ func (g *Game) getWinners() []map[string]string {
 	return w
 }
 
-func playerJSON(p *Player) map[string]interface{} {
+// playerJSON: hideAnswer blendet die gewählte Antwort aus (vor der Auflösung
+// sieht niemand die Antworten der anderen, Zuschauer*innen keine).
+func playerJSON(p *Player, hideAnswer bool) map[string]interface{} {
+	ans := p.Answer
+	if hideAnswer {
+		ans = -1
+	}
 	return map[string]interface{}{
 		"id": p.ID, "name": p.Name, "teeth": p.Teeth, "maxTeeth": p.MaxTeeth,
-		"alive": p.Alive, "answer": p.Answer, "answered": p.Answered,
+		"alive": p.Alive, "answer": ans, "answered": p.Answered,
 		"justLost": p.JustLost, "justDied": p.JustDied, "lostThisGame": p.LostThisGame,
 		"eliminated": p.Eliminated, "connected": p.Connected, "spectator": p.Spectator,
 	}
@@ -731,13 +743,17 @@ type clientGameSettings struct {
 	WebSearch         bool      `json:"webSearch"`
 	PlayIntro         bool      `json:"playIntro"`
 	AllowAnswerChange bool      `json:"allowAnswerChange"`
+	NoWatch           bool      `json:"noWatch"`
 }
 
-func (g *Game) buildState() map[string]interface{} {
+// buildStateFor baut den State aus Sicht von viewer (Player-ID, "" =
+// Zuschauer*in ohne Platz). Während einer Frage enthält er nur die eigene
+// Antwort, nie die richtige oder kommende Fragen. Aufruf mit g.mu.
+func (g *Game) buildStateFor(viewer string) map[string]interface{} {
 	ps := make([]map[string]interface{}, 0)
 	for _, id := range g.PlayerOrder {
 		if p, ok := g.Players[id]; ok {
-			ps = append(ps, playerJSON(p))
+			ps = append(ps, playerJSON(p, g.Phase == PhaseQuestion && id != viewer))
 		}
 	}
 	tQ := g.Settings.NumQuestions
@@ -752,13 +768,13 @@ func (g *Game) buildState() map[string]interface{} {
 		ShowTutorial: g.Settings.ShowTutorial, LobbyName: g.Settings.LobbyName,
 		LobbyMode: g.Settings.LobbyMode, HasPassword: g.Settings.LobbyPassword != "",
 		WebSearch: g.Settings.WebSearch, PlayIntro: g.Settings.PlayIntro,
-		AllowAnswerChange: g.Settings.AllowAnswerChange,
+		AllowAnswerChange: g.Settings.AllowAnswerChange, NoWatch: g.Settings.NoWatch,
 	}
 	st := map[string]interface{}{
 		"phase": g.Phase, "players": ps, "settings": cs,
 		"hostId": g.HostID, "gameId": g.ID, "inviteCode": g.InviteCode,
 		"currentQuestion": g.CurrentQ, "totalQuestions": tQ, "timeLeft": 0, "someoneLost": g.SomeoneLost, "allWrong": g.AllWrong, "allCorrect": g.AllCorrect,
-		"delegatedTo": g.DelegatedTo,
+		"delegatedTo": g.DelegatedTo, "watchers": int(g.watchCount.Load()),
 	}
 	if g.Settings.Mode == ModeBattleRoyale || g.Settings.Mode == ModeSingleplayer {
 		st["currentDifficulty"] = g.currentDifficulty()
@@ -803,18 +819,38 @@ func (g *Game) buildState() map[string]interface{} {
 	return st
 }
 
+func stateMsg(st map[string]interface{}) []byte {
+	d, _ := json.Marshal(map[string]interface{}{"type": "state", "payload": st})
+	return d
+}
+
 func (g *Game) broadcastState() {
 	g.mu.Lock()
-	st := g.buildState()
+	pub := stateMsg(g.buildStateFor(""))
+	var own map[string][]byte // nur während einer Frage unterscheiden sich die Sichten
+	if g.Phase == PhaseQuestion {
+		own = make(map[string][]byte, len(g.Players))
+		for id := range g.Players {
+			own[id] = stateMsg(g.buildStateFor(id))
+		}
+	}
 	g.mu.Unlock()
-	d, _ := json.Marshal(map[string]interface{}{"type": "state", "payload": st})
 	g.connMu.Lock()
 	defer g.connMu.Unlock()
-	for _, c := range g.connections {
+	for pid, c := range g.connections {
+		d := pub
+		if o, ok := own[pid]; ok {
+			d = o
+		}
 		c.WriteMessage(websocket.TextMessage, d)
+	}
+	for c := range g.watchers {
+		c.WriteMessage(websocket.TextMessage, pub)
 	}
 }
 
+// broadcastMsg geht an alle Verbindungen, auch an Zuschauer*innen – also nie
+// etwas Privates damit verschicken.
 func (g *Game) broadcastMsg(mt string, pl interface{}) {
 	d, _ := json.Marshal(map[string]interface{}{"type": mt, "payload": pl})
 	g.connMu.Lock()
@@ -822,6 +858,17 @@ func (g *Game) broadcastMsg(mt string, pl interface{}) {
 	for _, c := range g.connections {
 		c.WriteMessage(websocket.TextMessage, d)
 	}
+	for c := range g.watchers {
+		c.WriteMessage(websocket.TextMessage, d)
+	}
+}
+
+// writeTo schreibt unter connMu auf eine Verbindung dieser Lobby (Broadcasts
+// dürfen nicht gleichzeitig darauf schreiben).
+func (g *Game) writeTo(conn *websocket.Conn, d []byte) {
+	g.connMu.Lock()
+	defer g.connMu.Unlock()
+	conn.WriteMessage(websocket.TextMessage, d)
 }
 
 func (g *Game) sendTo(pid, mt string, pl interface{}) {

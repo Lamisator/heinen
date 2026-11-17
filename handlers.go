@@ -322,7 +322,7 @@ func handleAIConfig(w http.ResponseWriter, r *http.Request) {
 	case "POST":
 		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 		var req struct {
-			Provider, Model, OpenaiKey, AnthropicKey, IntroDelay                                                          string
+			Provider, Model, OpenaiKey, AnthropicKey, IntroDelay                                                                       string
 			VolIntro, VolBackground, VolWrong, VolAnswer, VolHurry, VolTimeout, VolQuestion, VolAllwrong, VolAllcorrect, VolGenerating string
 		}
 		json.NewDecoder(r.Body).Decode(&req)
@@ -738,22 +738,22 @@ func handleGameHistory(w http.ResponseWriter, r *http.Request) {
 		Players       []playerRoundDetail `json:"players"`
 	}
 	type gameDetail struct {
-		ID           string       `json:"id"`
-		HostUser     string       `json:"hostUser"`
-		LobbyName    string       `json:"lobbyName"`
-		Mode         string       `json:"mode"`
-		Topic        string       `json:"topic"`
-		Difficulty   string       `json:"difficulty"`
-		StartDiff    string       `json:"startDifficulty"`
-		NumTeeth     int          `json:"numTeeth"`
-		TimePerQ     int          `json:"timePerQ"`
-		NumOptions   int          `json:"numOptions"`
-		NumPlayers   int          `json:"numPlayers"`
-		StartedAt    int64        `json:"startedAt"`
-		EndedAt      *int64       `json:"endedAt,omitempty"`
-		EndPhase     string       `json:"endPhase"`
-		Winners      []string     `json:"winners"`
-		Rounds       []roundDetail `json:"rounds"`
+		ID         string        `json:"id"`
+		HostUser   string        `json:"hostUser"`
+		LobbyName  string        `json:"lobbyName"`
+		Mode       string        `json:"mode"`
+		Topic      string        `json:"topic"`
+		Difficulty string        `json:"difficulty"`
+		StartDiff  string        `json:"startDifficulty"`
+		NumTeeth   int           `json:"numTeeth"`
+		TimePerQ   int           `json:"timePerQ"`
+		NumOptions int           `json:"numOptions"`
+		NumPlayers int           `json:"numPlayers"`
+		StartedAt  int64         `json:"startedAt"`
+		EndedAt    *int64        `json:"endedAt,omitempty"`
+		EndPhase   string        `json:"endPhase"`
+		Winners    []string      `json:"winners"`
+		Rounds     []roundDetail `json:"rounds"`
 	}
 
 	var gd gameDetail
@@ -854,7 +854,9 @@ func handleLobbies(w http.ResponseWriter, r *http.Request) {
 	lobbies := make([]map[string]interface{}, 0)
 	for _, g := range games {
 		g.mu.Lock()
-		if g.Phase == PhaseLobby && g.Settings.LobbyMode == LobbyOpen {
+		// offene Lobbys zum Beitreten, laufende offene Spiele zum Zuschauen
+		running := g.Phase != PhaseLobby && g.Phase != PhaseError
+		if g.Settings.LobbyMode == LobbyOpen && (!running || !g.Settings.NoWatch) {
 			connected := 0
 			for _, p := range g.Players {
 				if p.Connected {
@@ -865,6 +867,7 @@ func handleLobbies(w http.ResponseWriter, r *http.Request) {
 				"inviteCode": g.InviteCode, "lobbyName": g.Settings.LobbyName,
 				"lobbyMode": g.Settings.LobbyMode, "topic": g.Settings.Topic,
 				"mode": g.Settings.Mode, "players": connected, "host": g.HostUser,
+				"running": running, "watch": !g.Settings.NoWatch, "watchers": int(g.watchCount.Load()),
 			})
 		}
 		g.mu.Unlock()
@@ -1011,9 +1014,9 @@ func handleAdminQuestions(w http.ResponseWriter, r *http.Request) {
 			Topic         string   `json:"topic"`
 			AIProvider    string   `json:"aiProvider"`
 			AIModel       string   `json:"aiModel"`
-			MarkPairA  int64 `json:"markPairA"`
-			MarkPairB  int64 `json:"markPairB"`
-			ClearReport bool  `json:"clearReport"`
+			MarkPairA     int64    `json:"markPairA"`
+			MarkPairB     int64    `json:"markPairB"`
+			ClearReport   bool     `json:"clearReport"`
 		}
 		json.NewDecoder(r.Body).Decode(&putReq)
 		if putReq.ID == 0 && putReq.MarkPairA == 0 {
