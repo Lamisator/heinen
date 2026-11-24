@@ -1300,7 +1300,7 @@ function renderMoveBox(id,isHost){const el=document.getElementById(id);if(!el)re
   if(moveTargets===null&&!moveLoading){moveLoading=true;fetch('/api/move-targets').then(r=>r.ok?r.json():[]).then(l=>{moveTargets=l||[]}).catch(()=>{moveTargets=[]}).finally(()=>{moveLoading=false;if(gameState)renderMoveBox(id,myId===gameState.hostId)})}
   const body=moveTargets===null?'<p>Spiele werden geladen \u2026</p>':!moveTargets.length?'<p>Gerade ist kein anderes Spiel erreichbar.</p>'
     :'<div class="move-games">'+moveTargets.map(g=>'<button class="btn btn-s btn-sm"'+' onclick="moveTo(\''+esc(g.id)+'\',this.dataset.name)" data-name="'+esc(g.name)+'">'+esc(g.name)+(g.max?' <small>\u00b7 max. '+g.max+'</small>':'')+'</button>').join('')+'</div>';
-  el.innerHTML='<details'+(moveOpen?' open':'')+' ontoggle="moveOpen=this.open"><summary>&#128666; In ein anderes Spiel umziehen</summary><p>Alle in der Lobby kommen mit.</p>'+body+'</details>'}
+  setHTML(el,'<details'+(moveOpen?' open':'')+' ontoggle="moveOpen=this.open"><summary>&#128666; In ein anderes Spiel umziehen</summary><p>Alle in der Lobby kommen mit.</p>'+body+'</details>')}
 function moveTo(id,name){if(!confirm('Die Lobby mit allen nach '+name+' umziehen? Das laufende Spiel wird dabei beendet.'))return;send('move_game',{game:id})}
 function b64json(s){const b=atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4));return JSON.parse(new TextDecoder().decode(Uint8Array.from(b,c=>c.charCodeAt(0))))}
 // movePage (/m): der*die Host er\u00f6ffnet die Lobby, alle anderen holen ihren Platz ab
@@ -1394,7 +1394,7 @@ function sendLS(){
 
 function amISpectator(){if(watching)return true;if(!gameState)return false;const me=gameState.players.find(p=>p.id===myId);return !!(me&&me.spectator)}
 function toggleSpectator(){send('set_spectator',{spectator:!amISpectator()})}
-function spectatorCard(p,extraCls,showMe){return '<div class="pc spectating'+(extraCls||'')+'"><div class="pn">'+esc(p.name)+(showMe&&p.id===myId?' (Du)':'')+'</div><div class="ps spec">&#128065; Zuschauer*in</div><div class="spec-icon">&#128064;</div></div>'}
+function spectatorCard(p,extraCls,showMe){return '<div data-a="p'+esc(p.id)+'" class="pc spectating'+(extraCls||'')+'"><div class="pn">'+esc(p.name)+(showMe&&p.id===myId?' (Du)':'')+'</div><div class="ps spec">&#128065; Zuschauer*in</div><div class="spec-icon">&#128064;</div></div>'}
 function amIAlive(){if(watching)return false;if(!gameState)return true;const me=gameState.players.find(p=>p.id===myId);return me?me.alive:true}
 
 function delegateSettings(pid){send('delegate_settings',{playerId:pid})}
@@ -1450,12 +1450,12 @@ function renderGame(){if(!gameState)return;const ph=gameState.phase,isHost=myId=
   else if(ph==='error'){clearTimer();stopBg();showScreen('error');document.getElementById('error-back').textContent=watching?'Zur Startseite':'Zur Lobby zur\u00fcckkehren';document.getElementById('error-msg').textContent=gameState.errorMsg||'Unbekannter Fehler'}
   document.getElementById('host-controls').style.display=(isHost&&(ph==='question'||ph==='results'))?'block':'none';lastPhase=ph}
 
-function renderTutorial(isHost){document.getElementById('tutorial-content').innerHTML=tutorialHtml||'<p>Lade Tutorial...</p>';document.getElementById('tutorial-actions').innerHTML=isHost?'<button class="btn btn-p" onclick="skipTutorial()" style="max-width:280px">Weiter</button>':'<div style="color:var(--text2);font-size:.85rem">Warte auf den*die Host...</div>'}
+function renderTutorial(isHost){setHTML(document.getElementById('tutorial-content'),tutorialHtml||'<p>Lade Tutorial...</p>');setHTML(document.getElementById('tutorial-actions'),isHost?'<button class="btn btn-p" onclick="skipTutorial()" style="max-width:280px">Weiter</button>':'<div style="color:var(--text2);font-size:.85rem">Warte auf den*die Host...</div>')}
 
 function renderLobby(isHost){
   const invBox=document.querySelector('.gcd');if(invBox)invBox.style.display=isHost?'':'none';
   if(isHost){const link=location.origin+'/?join='+inviteCode;document.getElementById('invite-link').textContent=link;
-  const qrEl=document.getElementById('qr-code');qrEl.innerHTML='';try{new QRCode(qrEl,{text:link,width:180,height:180,colorDark:'#e4e4ef',colorLight:'#0a0a0f'})}catch(e){}}
+  const qrEl=document.getElementById('qr-code');if(qrEl.dataset.link!==link){qrEl.dataset.link=link;qrEl.innerHTML='';try{new QRCode(qrEl,{text:link,width:180,height:180,colorDark:'#e4e4ef',colorLight:'#0a0a0f'})}catch(e){}}}
   const s=gameState.settings,players=gameState.players||[],spLocked=players.filter(p=>p.connected&&!p.spectator).length>1;
   const delegatedTo=gameState.delegatedTo||'';
   const delegatedPlayer=delegatedTo?players.find(p=>p.id===delegatedTo):null;
@@ -1482,7 +1482,7 @@ function renderLobby(isHost){
       :otherPlayers.length
         ?'<div class="spt" style="margin-top:18px;margin-bottom:10px">Auswahl delegieren</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="l-delegate-pid" style="flex:1;min-width:120px;padding:9px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:Outfit,sans-serif;font-size:.9rem;outline:none">'+otherPlayers.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select><button class="btn btn-s btn-sm" onclick="delegateSettings(document.getElementById(\'l-delegate-pid\').value)">Delegieren</button><button class="btn btn-s btn-sm" onclick="delegateSettings(\'random\')">\u{1F3B2} Zuf\u00e4llig</button></div>'
         :'';
-    document.getElementById('lobby-settings').innerHTML='<div class="sp"><div class="spt">Einstellungen</div><div class="sg">'
+    setHTML(document.getElementById('lobby-settings'),'<div class="sp"><div class="spt">Einstellungen</div><div class="sg">'
       +'<div class="ig"><label>Lobby-Name</label><input type="text" id="l-lobbyname" value="'+esc(s.lobbyName||'')+'" onchange="sendLS()" maxlength="30"/></div>'
       +'<div class="ig"><label>Lobby-Modus</label><select id="l-lobbymode" onchange="sendLS()">'+lmOpts+'</select></div>'
       +(s.lobbyMode==='password'?'<div class="ig"><label>Lobby-Passwort</label><input type="password" id="l-lobbypw" value="'+esc(s.lobbyPassword||'')+'" onchange="sendLS()"/></div>':'')
@@ -1494,11 +1494,11 @@ function renderLobby(isHost){
       +'<div class="ig"><label>Z\u00e4hne</label><input type="number" id="l-teeth" value="'+s.numTeeth+'" min="1" max="20" onchange="sendLS()"/></div>'
       +'</div><div class="ig" style="margin-top:8px"><label><input type="checkbox" id="l-tutorial"'+(s.showTutorial?' checked':'')+' onchange="sendLS()"/>Tutorial anzeigen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-playintro"'+(s.playIntro!==false?' checked':'')+' onchange="sendLS()"/>Intro-Sound abspielen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-websearch"'+(s.webSearch?' checked':'')+' onchange="sendLS()"/>Internet-Recherche f\u00fcr Fragen</label></div><div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-allowchange"'+(s.allowAnswerChange!==false?' checked':'')+' onchange="sendLS()"/>Antwort \u00e4nderbar, solange nicht alle geantwortet haben</label></div>'
       +'<div class="ig" style="margin-top:4px"><label><input type="checkbox" id="l-allowwatch"'+(!s.noWatch?' checked':'')+' onchange="sendLS()"/>Zuschauer*innen zulassen (ohne Platz am Tisch)</label></div>'
-      +delegateHtml+'</div>';
+      +delegateHtml+'</div>');
   }else if(amIDelegated){const isKFO2=s.mode==='kfo_battle_royale'||s.mode==='kfo_singleplayer';
     const dOpts=['leicht','mittel','schwer','extrem'].map(d=>'<option value="'+d+'"'+(s.difficulty===d?' selected':'')+'>'+DL[d]+'</option>').join('');
     const sdOpts=['leicht','mittel','schwer','extrem'].map(d=>'<option value="'+d+'"'+((s.startDifficulty||'leicht')===d?' selected':'')+'>'+DL[d]+'</option>').join('');
-    document.getElementById('lobby-settings').innerHTML='<div class="sv">'
+    setHTML(document.getElementById('lobby-settings'),'<div class="sv">'
       +'<div style="background:rgba(255,107,157,.1);border:1px solid rgba(255,107,157,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.8rem;color:var(--accent2);text-align:center;font-weight:600">&#9997; Du darfst Thema &amp; Schwierigkeit w\u00e4hlen</div>'
       +'<div class="sg">'
       +'<div class="ig"><label>Thema</label><input type="text" id="l-topic" value="'+esc(s.topic)+'" onchange="sendLS()"/></div>'
@@ -1510,10 +1510,10 @@ function renderLobby(isHost){
       +(s.mode==='classic'?'<div class="sv-item"><span class="sv-label">Fragen</span><span class="sv-value">'+s.numQuestions+'</span></div>':'')
       +'<div class="sv-item"><span class="sv-label">Zeit</span><span class="sv-value">'+s.timePerQuestion+' Sek.</span></div>'
       +'<div class="sv-item"><span class="sv-label">Z\u00e4hne</span><span class="sv-value">'+s.numTeeth+'</span></div>'
-      +'</div></div>';
+      +'</div></div>');
   }else{const isKFO2=s.mode==='kfo_battle_royale'||s.mode==='kfo_singleplayer';
     const delegateNotice=delegatedTo&&delegatedPlayer?'<div style="background:rgba(255,107,157,.08);border:1px solid rgba(255,107,157,.25);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:.75rem;color:var(--accent2)">&#9997; '+esc(delegatedPlayer.name)+' w\u00e4hlt Thema &amp; Schwierigkeit</div>':'';
-    document.getElementById('lobby-settings').innerHTML='<div class="sv">'+delegateNotice+'<div class="spt">Spieleinstellungen</div><div class="sv-grid">'
+    setHTML(document.getElementById('lobby-settings'),'<div class="sv">'+delegateNotice+'<div class="spt">Spieleinstellungen</div><div class="sv-grid">'
       +'<div class="sv-item"><span class="sv-label">Lobby</span><span class="sv-value">'+esc(s.lobbyName||'-')+'</span></div>'
       +'<div class="sv-item"><span class="sv-label">Thema</span><span class="sv-value">'+esc(s.topic)+'</span></div>'
       +(!isKFO2?'<div class="sv-item"><span class="sv-label">Schwierigkeit</span><span class="sv-value">'+(DL[s.difficulty]||'Mittel')+'</span></div>':'')
@@ -1522,25 +1522,25 @@ function renderLobby(isHost){
       +(s.mode==='classic'?'<div class="sv-item"><span class="sv-label">Fragen</span><span class="sv-value">'+s.numQuestions+'</span></div>':'')
       +'<div class="sv-item"><span class="sv-label">Zeit</span><span class="sv-value">'+s.timePerQuestion+' Sek.</span></div>'
       +'<div class="sv-item"><span class="sv-label">Z\u00e4hne</span><span class="sv-value">'+s.numTeeth+'</span></div>'
-      +'</div></div>'}
+      +'</div></div>')}
   const nSpec=players.filter(p=>p.spectator).length,nPlay=players.length-nSpec;
   document.getElementById('players-count').textContent=lobbyCountText();
-  document.getElementById('lobby-players').innerHTML=players.map(p=>{
+  setHTML(document.getElementById('lobby-players'),players.map(p=>{
     const isH=p.id===gameState.hostId,isMe=p.id===myId,isD=delegatedTo&&p.id===delegatedTo;
-    return '<div class="pc'+(p.connected?'':' disconnected')+(isMe?' is-me':'')+(p.spectator?' spectating':'')+'">'
+    return '<div data-a="p'+esc(p.id)+'" class="pc'+(p.connected?'':' disconnected')+(isMe?' is-me':'')+(p.spectator?' spectating':'')+'">'
       +(isHost&&!isH?'<button class="kick-btn" onclick="kickPlayer(\''+p.id+'\')" title="Entfernen">&#10005;</button><button class="kick-btn" style="top:5px;right:25px" onclick="transferHost(\''+p.id+'\')" title="Host \u00fcbertragen">&#128081;</button>':'')
       +'<div class="pn">'+esc(p.name)+(isMe?' (Du)':'')+'</div>'
       +'<div class="ps'+(isH?' host':isD?' delegate':'')+'">'+
         (isH?'Host':isD?'W\u00e4hlt Thema':(p.connected?'Bereit':'Getrennt'))+(p.spectator?' \u2022 &#128065; Zuschauer*in':'')
       +'</div>'+(p.spectator?'<div class="spec-icon">&#128064;</div>':renderTeeth(p,false,false,false))+'</div>';
-  }).join('');
+  }).join(''));
   const tg=document.getElementById('spectate-toggle');
   if(watching){// Zuschauer*in ohne Platz: Name eingeben und hinsetzen (Formular bleibt bei neuen States stehen)
     if(!document.getElementById('sit-name')){tg.innerHTML='<div style="color:var(--text2);font-size:.85rem;margin-bottom:8px">&#128065; Du schaust zu, ohne Platz am Tisch.</div><div style="display:flex;gap:8px;max-width:360px;margin:0 auto;align-items:center"><div class="ig" style="flex:1;margin:0"><input type="text" id="sit-name" maxlength="20" placeholder="Dein Name..."/></div><button class="btn btn-p btn-sm" style="width:auto;white-space:nowrap" onclick="sitDown()">&#129681; Platz nehmen</button></div>';
       const sn=document.getElementById('sit-name');sn.value=sessionStorage.getItem('h_name')||'';sn.onkeydown=e=>{if(e.key==='Enter')sitDown()}}
   }else{const meSpec=amISpectator();
-  tg.innerHTML='<button class="btn btn-s btn-sm" onclick="toggleSpectator()" style="max-width:320px">'+(meSpec?(isHost?'&#129681; Selbst mitspielen':'&#127918; Doch mitspielen'):(isHost?'&#128065; Nur zuschauen (Gastgeber*in bleiben)':'&#128065; Nur zuschauen'))+'</button>'
-    +(isHost&&nPlay===0?'<div style="color:var(--text2);font-size:.8rem;margin-top:8px">Mindestens eine Person muss mitspielen.</div>':'')}
+  setHTML(tg,'<button class="btn btn-s btn-sm" onclick="toggleSpectator()" style="max-width:320px">'+(meSpec?(isHost?'&#129681; Selbst mitspielen':'&#127918; Doch mitspielen'):(isHost?'&#128065; Nur zuschauen (Gastgeber*in bleiben)':'&#128065; Nur zuschauen'))+'</button>'
+    +(isHost&&nPlay===0?'<div style="color:var(--text2);font-size:.8rem;margin-top:8px">Mindestens eine Person muss mitspielen.</div>':''))}
   document.getElementById('start-btn-container').style.display=(isHost&&nPlay>=1)?'block':'none';
   renderMoveBox('lobby-move',isHost)}
 
@@ -1551,18 +1551,18 @@ function renderTeeth(p,anim,showLost,showDead){let upper=[],lower=[];for(let i=0
 function qCounterText(q){const m=gameState.settings.mode,isEndless=m!=='classic';let t=isEndless?'Frage '+(q.index+1):'Frage '+(q.index+1)+' / '+gameState.totalQuestions;if(gameState.currentDifficulty)t+=' \u2022 '+(DL[gameState.currentDifficulty]||gameState.currentDifficulty);return t}
 function renderQuestion(){const q=gameState.question;if(!q)return;document.getElementById('q-counter').textContent=qCounterText(q);document.getElementById('q-text').textContent=q.text;document.getElementById('results-info').style.display='none';qReportedCurrent=false;const ra=document.getElementById('q-report-area');if(ra)ra.innerHTML='<button class="q-report-btn" onclick="reportQuestion()">Problem mit dieser Frage?</button>';renderOptions()}
 function renderOptions(){const q=gameState.question;if(!q)return;const L=['A','B','C','D','E','F'];const alive=amIAlive();const changeable=selectedAnswer>=0&&canChangeAnswer();
-  document.getElementById('q-options').innerHTML=q.options.map((o,i)=>{if(!alive)return '<button class="ob spectator"><span class="ol">'+L[i]+'</span> '+esc(o)+'</button>';const sel=selectedAnswer===i?' sel':'',dis=selectedAnswer>=0&&!changeable?' dis':'';return '<button class="ob'+sel+dis+'" '+(selectedAnswer<0||changeable?'onclick="submitAnswer('+i+')"':'')+'><span class="ol">'+L[i]+'</span> '+esc(o)+'</button>'}).join('')}
+  setHTML(document.getElementById('q-options'),q.options.map((o,i)=>{if(!alive)return '<button class="ob spectator"><span class="ol">'+L[i]+'</span> '+esc(o)+'</button>';const sel=selectedAnswer===i?' sel':'',dis=selectedAnswer>=0&&!changeable?' dis':'';return '<button class="ob'+sel+dis+'" '+(selectedAnswer<0||changeable?'onclick="submitAnswer('+i+')"':'')+'><span class="ol">'+L[i]+'</span> '+esc(o)+'</button>'}).join(''))}
 function renderResults(){const q=gameState.question,r=gameState.results;if(!q||!r)return;document.getElementById('q-counter').textContent=qCounterText(q);document.getElementById('q-text').textContent=q.text;const L=['A','B','C','D','E','F'];
-  document.getElementById('q-options').innerHTML=q.options.map((o,i)=>{let c='ob dis';if(i===r.correctAnswer)c+=' correct';else if(selectedAnswer===i)c+=' wrong';return '<button class="'+c+'"><span class="ol">'+L[i]+'</span> '+esc(o)+'</button>'}).join('');
+  setHTML(document.getElementById('q-options'),q.options.map((o,i)=>{let c='ob dis';if(i===r.correctAnswer)c+=' correct';else if(selectedAnswer===i)c+=' wrong';return '<button class="'+c+'"><span class="ol">'+L[i]+'</span> '+esc(o)+'</button>'}).join(''));
   const my=r.playerResults[myId],info=document.getElementById('results-info');info.style.display='block';
-  if(my==='correct')info.innerHTML='<span style="color:var(--correct)">Richtige Antwort!</span>';else if(my==='wrong')info.innerHTML='<span style="color:var(--wrong)">Falsche Antwort – Zahn verloren!</span>';else if(my==='timeout'){info.innerHTML='<span style="color:var(--wrong)">Zeit abgelaufen – Zahn verloren!</span>'}else if(amISpectator())info.innerHTML='<span style="color:var(--text2)">&#128065; Du schaust zu.</span>';else if(!amIAlive())info.innerHTML='<span style="color:var(--text2)">Du bist ausgeschieden.</span>';document.getElementById('q-timer').textContent='\u2014'}
+  if(my==='correct')setHTML(info,'<span style="color:var(--correct)">Richtige Antwort!</span>');else if(my==='wrong')setHTML(info,'<span style="color:var(--wrong)">Falsche Antwort – Zahn verloren!</span>');else if(my==='timeout'){setHTML(info,'<span style="color:var(--wrong)">Zeit abgelaufen – Zahn verloren!</span>')}else if(amISpectator())setHTML(info,'<span style="color:var(--text2)">&#128065; Du schaust zu.</span>');else if(!amIAlive())setHTML(info,'<span style="color:var(--text2)">Du bist ausgeschieden.</span>');document.getElementById('q-timer').textContent='\u2014'}
 function renderGamePlayers(isHost){const players=gameState.players||[],ph=gameState.phase;document.getElementById('game-players-title').textContent=gameTitleText();
   let progressHtml='';
   if(ph==='question'){const active=players.filter(p=>p.alive&&p.connected);const answeredCount=active.filter(p=>p.answered).length;const total=active.length;
     const pct=total>0?Math.round(answeredCount/total*100):0;
     progressHtml='<div class="ans-progress" style="position:sticky;bottom:0;background:linear-gradient(to bottom,transparent,var(--bg) 40%);padding:16px 0 2px;margin-top:10px;margin-bottom:0">'+answeredCount+'\u00a0von\u00a0'+total+' haben geantwortet'
       +'<div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:var(--correct);border-radius:2px;transition:width .4s"></div></div></div>'}
-  document.getElementById('game-players').innerHTML=players.map(p=>{if(p.spectator)return spectatorCard(p,(p.connected?'':' disconnected')+(p.id===myId?' is-me':''),true);let ec='';if(!p.alive)ec=' eliminated';if(!p.connected)ec+=' disconnected';if(p.id===myId)ec+=' is-me';
+  setHTML(document.getElementById('game-players'),players.map(p=>{if(p.spectator)return spectatorCard(p,(p.connected?'':' disconnected')+(p.id===myId?' is-me':''),true);let ec='';if(!p.alive)ec=' eliminated';if(!p.connected)ec+=' disconnected';if(p.id===myId)ec+=' is-me';
     if(ph==='question'&&p.alive&&p.connected&&p.answered)ec+=' q-answered';
     let status='';
     if(!p.alive)status='<span style="color:var(--wrong)">Ausgeschieden</span>';
@@ -1570,18 +1570,18 @@ function renderGamePlayers(isHost){const players=gameState.players||[],ph=gameSt
     else if(ph==='question'&&p.answered)status='<span style="color:var(--correct);font-size:.8rem;font-weight:600;text-transform:none;letter-spacing:0">&#10003; Beantwortet</span>';
     else if(ph==='question')status='<span style="color:var(--text2);font-size:.8rem;text-transform:none;letter-spacing:0">&#8987; Wartet\u2026</span>';
     else status='';
-    return '<div class="pc'+ec+'"><div class="pn">'+esc(p.name)+(p.id===myId?' (Du)':'')+'</div><div class="ps">'+status+'</div>'+renderTeeth(p,ph==='results',true,true)+'</div>'}).join('')+progressHtml}
+    return '<div data-a="p'+esc(p.id)+'" class="pc'+ec+'"><div class="pn">'+esc(p.name)+(p.id===myId?' (Du)':'')+'</div><div class="ps">'+status+'</div>'+renderTeeth(p,ph==='results',true,true)+'</div>'}).join('')+progressHtml)}
 function renderEnd(isHost){const c=document.getElementById('end-content'),players=gameState.players||[],winners=gameState.winners||[];
   const m=gameState.settings.mode,isEndless=m!=='classic',isSP=m==='kfo_singleplayer';
-  if(isSP){c.innerHTML='<div style="font-size:2.5rem;margin-bottom:8px">&#127942;</div><div class="winner-display">'+(gameState.finalScore||0)+' Fragen geschafft!</div><div class="end-sub">Schwierigkeit: '+(DL[gameState.currentDifficulty||'leicht']||'?')+'</div>'}
-  else if(winners.length===1)c.innerHTML='<div style="font-size:2.5rem;margin-bottom:8px">&#127942;</div><div class="winner-display">'+esc(winners[0].name)+' gewinnt!</div><div class="end-sub">'+(isEndless?'Letzte*r mit Zähnen!':'Die meisten Zähne behalten!')+'</div>';
-  else if(winners.length>1)c.innerHTML='<div style="font-size:2.5rem;margin-bottom:8px">&#127942;</div><div class="winner-display">Gleichstand!</div><div class="end-sub">Gewinner*innen: '+winners.map(w=>esc(w.name)).join(', ')+'</div>';
-  else c.innerHTML='<div style="font-size:2.5rem;margin-bottom:8px">&#128128;</div><div class="no-winner">Alle ausgeheint!</div><div class="end-sub">Keine*r hat gewonnen.</div>';
+  if(isSP){setHTML(c,'<div style="font-size:2.5rem;margin-bottom:8px">&#127942;</div><div class="winner-display">'+(gameState.finalScore||0)+' Fragen geschafft!</div><div class="end-sub">Schwierigkeit: '+(DL[gameState.currentDifficulty||'leicht']||'?')+'</div>')}
+  else if(winners.length===1)setHTML(c,'<div style="font-size:2.5rem;margin-bottom:8px">&#127942;</div><div class="winner-display">'+esc(winners[0].name)+' gewinnt!</div><div class="end-sub">'+(isEndless?'Letzte*r mit Zähnen!':'Die meisten Zähne behalten!')+'</div>');
+  else if(winners.length>1)setHTML(c,'<div style="font-size:2.5rem;margin-bottom:8px">&#127942;</div><div class="winner-display">Gleichstand!</div><div class="end-sub">Gewinner*innen: '+winners.map(w=>esc(w.name)).join(', ')+'</div>');
+  else setHTML(c,'<div style="font-size:2.5rem;margin-bottom:8px">&#128128;</div><div class="no-winner">Alle ausgeheint!</div><div class="end-sub">Keine*r hat gewonnen.</div>');
   const wIds=new Set(winners.map(w=>w.id));const sorted=players.filter(p=>!p.spectator).sort((a,b)=>b.teeth-a.teeth),specs=players.filter(p=>p.spectator);
-  document.getElementById('end-players').innerHTML='<div class="pst">Endergebnis</div><div class="pg">'+sorted.map(p=>{const w=wIds.has(p.id);return '<div class="pc'+(!p.alive?' eliminated':'')+'" style="'+(w?'border-color:var(--gold);box-shadow:0 0 16px rgba(255,215,0,.2)':'')+'"><div class="pn">'+(w?'&#128081; ':'')+esc(p.name)+' <span style="color:var(--text2);font-size:.75rem">('+p.teeth+'/'+p.maxTeeth+')</span></div><div class="ps'+(w?' host':(!p.alive?' elim':''))+'">'+
-    (w?'Gewinner*in!':(!p.alive?'Ausgeschieden':'Überlebt'))+'</div>'+renderTeeth(p,false,false,false)+'</div>'}).join('')+specs.map(p=>spectatorCard(p,'',true)).join('')+'</div>';
+  setHTML(document.getElementById('end-players'),'<div class="pst">Endergebnis</div><div class="pg">'+sorted.map(p=>{const w=wIds.has(p.id);return '<div data-a="p'+esc(p.id)+'" class="pc'+(!p.alive?' eliminated':'')+'" style="'+(w?'border-color:var(--gold);box-shadow:0 0 16px rgba(255,215,0,.2)':'')+'"><div class="pn">'+(w?'&#128081; ':'')+esc(p.name)+' <span style="color:var(--text2);font-size:.75rem">('+p.teeth+'/'+p.maxTeeth+')</span></div><div class="ps'+(w?' host':(!p.alive?' elim':''))+'">'+
+    (w?'Gewinner*in!':(!p.alive?'Ausgeschieden':'Überlebt'))+'</div>'+renderTeeth(p,false,false,false)+'</div>'}).join('')+specs.map(p=>spectatorCard(p,'',true)).join('')+'</div>');
   renderMoveBox('end-move',isHost);
-  document.getElementById('end-actions').innerHTML=isHost?'<button class="btn btn-p" onclick="playAgain()" style="max-width:280px;margin:0 auto">Nochmal spielen</button>':'<div style="color:var(--text2)">Warte auf den*die Host...'+(watching?'<br><span style="font-size:.8rem">&#128065; Du schaust zu \u2013 sobald die n\u00e4chste Lobby offen ist, kannst du dich dazusetzen.</span>':'')+'</div>';
+  setHTML(document.getElementById('end-actions'),isHost?'<button class="btn btn-p" onclick="playAgain()" style="max-width:280px;margin:0 auto">Nochmal spielen</button>':'<div style="color:var(--text2)">Warte auf den*die Host...'+(watching?'<br><span style="font-size:.8rem">&#128065; Du schaust zu \u2013 sobald die n\u00e4chste Lobby offen ist, kannst du dich dazusetzen.</span>':'')+'</div>');
   sessionStorage.removeItem('h_invite');sessionStorage.removeItem('h_name')}
 
 function startTimer(){clearTimer();currentTimeLeft=gameState.timeLeft||0;updateTimer();timerInterval=setInterval(()=>{currentTimeLeft--;if(currentTimeLeft<0)currentTimeLeft=0;
@@ -1591,6 +1591,41 @@ function startTimer(){clearTimer();currentTimeLeft=gameState.timeLeft||0;updateT
 function clearTimer(){if(timerInterval){clearInterval(timerInterval);timerInterval=null}}
 function updateTimer(){const el=document.getElementById('q-timer');el.textContent=currentTimeLeft;el.classList.toggle('urgent',currentTimeLeft<=5)}
 function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+// setHTML brings el's children up to the given HTML by changing only what
+// differs (morphing) instead of replacing everything with innerHTML, so
+// player cards, teeth and buttons stay the same elements across state
+// updates: no flicker, hover kept, CSS animations (just-lost tooth) play
+// once instead of on every update. Inline on* attributes are patched like
+// any attribute. Form fields are swapped for the new ones; the focused
+// field keeps its value and caret. Elements with data-a="key" are matched
+// by key (lists that reorder).
+function setHTML(el,html){const t=document.createElement('template');t.innerHTML=html;
+  const a=document.activeElement;let keep=null;
+  if(a&&a.id&&el.contains(a)&&(a.tagName==='INPUT'||a.tagName==='SELECT'||a.tagName==='TEXTAREA')&&a.type!=='range')keep={id:a.id,value:a.value,start:a.selectionStart,end:a.selectionEnd,type:a.type};
+  morphKids(el,t.content);
+  if(keep){const e=document.getElementById(keep.id);if(e&&e!==a){if(keep.type!=='checkbox'&&keep.type!=='radio')e.value=keep.value;e.focus();try{if(keep.start!==null)e.setSelectionRange(keep.start,keep.end)}catch(x){}}}}
+function mKey(n){return n.nodeType===1?n.getAttribute('data-a'):null}
+function mSame(a,b){return a.nodeType===b.nodeType&&a.nodeName===b.nodeName&&mKey(a)===mKey(b)&&(a.nodeType!==1||a.id===b.id)}
+// for the look-ahead: elements count as "the same" only with the same first class
+function mSameClass(a,b){if(a.nodeType!==1)return true;const c=e=>(e.getAttribute('class')||'').split(' ')[0];return c(a)===c(b)}
+const M_FIELDS=new Set(['INPUT','SELECT','TEXTAREA','CANVAS']);
+function morphNode(old,neu){
+  if(old.nodeType!==1){if(old.nodeValue!==neu.nodeValue)old.nodeValue=neu.nodeValue;return old}
+  const range=old.nodeName==='INPUT'&&old.type==='range'&&neu.type==='range';
+  if(M_FIELDS.has(old.nodeName)&&!range){old.replaceWith(neu);return neu}
+  for(const {name} of [...old.attributes])if(!neu.hasAttribute(name))old.removeAttribute(name);
+  for(const {name,value} of [...neu.attributes])if(old.getAttribute(name)!==value)old.setAttribute(name,value);
+  if(range&&document.activeElement!==old&&old.value!==neu.value)old.value=neu.value;
+  morphKids(old,neu);return old}
+function morphKids(old,neu){const olds=[...old.childNodes],keyed=new Map();for(const o of olds)if(mKey(o))keyed.set(mKey(o),o);
+  const used=new Set(),out=[];let oi=0;
+  for(const n of [...neu.childNodes]){let match=null;const k=mKey(n);
+    if(k){const o=keyed.get(k);if(o&&!used.has(o)&&mSame(o,n))match=o}
+    else{// the next free old node of the same kind; an optional node that came or went before it does not throw the rest off
+      for(let j=oi;j<olds.length;j++){if(!used.has(olds[j])&&!mKey(olds[j])&&mSame(olds[j],n)&&mSameClass(olds[j],n)){match=olds[j];oi=j+1;break}}}
+    if(match){used.add(match);out.push(morphNode(match,n))}else out.push(n)}
+  for(const o of olds)if(!used.has(o)&&o.parentNode===old)o.remove();
+  let cur=old.firstChild;for(const n of out){if(n===cur)cur=cur.nextSibling;else old.insertBefore(n,cur)}}
 function showToast(msg,isErr){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show'+(isErr?' error':' success');setTimeout(()=>el.className='toast',3000)}
 
 document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
